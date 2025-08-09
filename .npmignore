@@ -1,0 +1,6 @@
+src
+.gitignore
+.npmignore
+README.md
+tsup.config.ts
+deploy

@@ -1,0 +1,21 @@
+#!/bin/bash
+
+CURRENT_VERSION=$(node -p "require('./package.json').version")
+VERSION=${1:-"minor"}
+
+npm run build
+
+git add .
+git commit -m "chore: release $CURRENT_VERSION -> $VERSION"
+
+npm version $VERSION
+
+read -p "Are you sure you want to deploy? (y/N): " confirm
+if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
+  echo "Deployment cancelled."
+  exit 1
+fi
+
+npm publish
+git push --tags
+git push

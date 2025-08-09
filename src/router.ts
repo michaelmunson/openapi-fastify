@@ -1,6 +1,6 @@
 import { FastifyInstance } from "fastify";
 import { MethodFromSpec, MethodRecord, OpenApiPathOperator, Operator, OperatorName, RefStrings, RefStringToRecord } from "./types";
-import { modifyOperatorSpec } from "./utils";
+import { RouterOptions } from "./types/router.types";
 
 export class OpenApiRouter<T> {
   routes: Array<{
@@ -8,7 +8,7 @@ export class OpenApiRouter<T> {
     methods: MethodRecord;
   }> = [];
 
-  constructor(readonly app: FastifyInstance, readonly document: T) {}
+  constructor(readonly app: FastifyInstance, readonly document: T, readonly options:RouterOptions={}) {}
 
   route(path:string, methods:MethodRecord) {
     const route = {
@@ -38,9 +38,9 @@ export class OpenApiRouter<T> {
     for (const {path, methods} of this.routes) {
       for (const [_method, {specification:originalSpec, handler}] of Object.entries(methods)) {
         const method = _method as OperatorName;
-        const specification = modifyOperatorSpec(originalSpec);
+        const specification = this.options.specModifier ? this.options.specModifier(originalSpec) : originalSpec;
         this.app[method](path, {
-          schema: specification
+          schema: specification as any
         }, handler);
       }
     }

@@ -1,4 +1,4 @@
-import { OpenApiParameter, OpenApiPathOperator, OpenApiRequestBody, QueryParametersToRecord, SchemaToRecord } from "./util.types";
+import { OpenApiParameter, OpenApiPathOperator, OpenApiRequestBody, QueryParametersToRecord } from "./util.types";
 import { FastifyReply, FastifyRequest, RouteGenericInterface } from "fastify";
 import { ParametersToRecord, RequestBodyToRecord } from "./util.types";
 import { OPERATOR_NAMES } from "../utils";
