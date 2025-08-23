@@ -7,6 +7,7 @@ A TypeScript-first OpenAPI router for Fastify that provides full type safety and
 - 🚀 **Type-Safe**: Full TypeScript support with automatic type inference
 - 📝 **OpenAPI Integration**: Automatic OpenAPI specification generation
 - ⚡ **Fastify Native**: Built specifically for Fastify with optimal performance
+- 🛡️ **Schema Parsing & Enforcement**: Built-in parsing and validation of query parameters and request bodies according to your OpenAPI schemas
 - 🔧 **Flexible**: Support for all HTTP methods and OpenAPI features
 - 🎯 **Simple API**: Clean and intuitive API design
 
@@ -284,11 +285,53 @@ schema: $.ref('#/components/schemas/UserData')
 
 ```typescript
 interface RouterOptions {
+  /**
+   * A function that modifies the OpenAPI specification.
+   * @param spec - The OpenAPI specification.
+   * @returns The modified OpenAPI specification.
+   */
   specModifier?: (spec: OpenApiPathOperator) => OpenApiPathOperator;
+  
+  /**
+   * Whether to parse query parameters.
+   * If true, the query parameters will be parsed according to that query parameter's schema type.
+   * @default false
+   */
+  parseQueryParams?: boolean;
+  
+  /**
+   * Whether to enforce the request body schema.
+   * If true, the request body will be validated against the schema.
+   * @default false
+   */
+  enforceRequestBodySchema?: boolean;
+  
+  /**
+   * Whether to parse the request body.
+   * If true, the request body will be parsed according to that request body's schema type.
+   * This includes applying defaults to the request body.
+   * @default false
+   */
+  parseRequestBody?: boolean;
 }
 ```
 
-- `specModifier`: Optional function to modify OpenAPI specifications before registration
+#### Option Details
+
+- **`specModifier`**: Optional function to modify OpenAPI specifications before registration
+- **`parseQueryParams`**: When enabled, automatically converts query parameters to their proper types (string, integer, number, boolean) based on the OpenAPI schema
+- **`enforceRequestBodySchema`**: When enabled, validates incoming request bodies against the OpenAPI schema and returns a 400 error if validation fails
+- **`parseRequestBody`**: When enabled, applies default values from the OpenAPI schema to missing properties in the request body
+
+#### Example Usage
+
+```typescript
+const $ = new OpenApiRouter(app, specification, {
+  parseQueryParams: true,
+  enforceRequestBodySchema: true,
+  parseRequestBody: true
+});
+```
 
 ## Examples
 

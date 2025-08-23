@@ -7,6 +7,7 @@ const hitMockServer = async (route: `/${string}`, options?:RequestInit) => {
 };
 
 describe("Integration", () => {
+
   describe("GET /hello", () => {
     it("should return a hello world message", async () => {
       const res = await hitMockServer("/hello");
@@ -115,6 +116,43 @@ describe("Integration", () => {
       expect(data).toHaveProperty("role", newUser.role);
       expect(data).not.toHaveProperty("password");
     });
+    it("should apply default value for 'role' in POST /users (request body parsing)", async () => {
+      // 'role' is omitted, should be set to its default value by the server
+      const newUser = {
+        username: `defaultrole_${Math.random().toString(36).slice(2)}`,
+        email: `defaultrole${Math.random().toString(36).slice(2)}@example.com`,
+        password: "testpassword"
+        // no 'role'
+      };
+      const res = await hitMockServer("/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newUser)
+      });
+      expect(res.status).toBe(201);
+      const data = await res.json();
+      expect(data).toHaveProperty("role", "user"); // assuming default is "user"
+    });
+    it("should create a new user with role 'admin' when specified", async () => {
+      const newUser = {
+        username: `adminuser_${Math.random().toString(36).slice(2)}`,
+        email: `admin${Math.random().toString(36).slice(2)}@example.com`,
+        password: "adminpassword",
+        role: "admin"
+      };
+      const res = await hitMockServer("/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(newUser)
+      });
+      expect(res.status).toBe(201);
+      const data = await res.json();
+      expect(data).toHaveProperty("id");
+      expect(data).toHaveProperty("username", newUser.username);
+      expect(data).toHaveProperty("email", newUser.email);
+      expect(data).toHaveProperty("role", "admin");
+      expect(data).not.toHaveProperty("password");
+    });
   });
 
   describe("POST /posts", () => {
@@ -216,28 +254,6 @@ describe("Integration", () => {
       expect(data).toHaveProperty("error", "Invalid request body");
       expect(Array.isArray(data.errors)).toBe(true);
       expect(data.errors.some((e: any) => e.message && e.message.includes("must have required property 'title'"))).toBe(true);
-    });
-
-    it("should apply default value for 'published' in POST /posts (request body parsing)", async () => {
-      // 'published' is omitted, should be set to its default value by the server
-      const usersRes = await hitMockServer("/users");
-      const users = await usersRes.json();
-      if (users.length === 0) return;
-      const userId = users[0].id;
-      const newPost = {
-        userId,
-        title: "Default published test",
-        content: "Should apply default value for published"
-        // no 'published'
-      };
-      const res = await hitMockServer("/posts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newPost)
-      });
-      expect(res.status).toBe(201);
-      const data = await res.json();
-      expect(data).toHaveProperty("published", false); // assuming default is false
     });
   });
 });

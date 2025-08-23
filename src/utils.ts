@@ -42,7 +42,6 @@ const validateRequestBody = <T extends OpenApiPathOperator>(specification: T, re
   const {schema} = content['application/json'] as {schema:OpenApiSchema};
   const validate = ajv.compile(schema);
   const isValid = validate(request.body);
-  console.log(validate)
   return {
     isValid,
     errors:validate.errors,

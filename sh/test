@@ -31,7 +31,14 @@ function check-cleanup(){
 main(){
   initialize
   npx jest
+  TEST_RESULT=$?
   cleanup
+  if [ $TEST_RESULT -eq 0 ]; then
+    echo "✅ Test passed"
+  else
+    echo "❌ Test failed"
+  fi
+  exit $TEST_RESULT
 }
 
 if [ "$COMMAND" == "cleanup" ]; then
