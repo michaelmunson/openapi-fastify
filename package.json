@@ -2,7 +2,7 @@
   "name": "openapi-fastify",
   "version": "1.3.0",
   "description": "OpenAPI Fastify Router",
-  "main": "./dist/index.js",
+  "main": "./dist/index.cjs",
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsup",
@@ -13,7 +13,7 @@
     ".": {
       "types": "./dist/index.d.ts",
       "require": "./dist/index.cjs",
-      "import": "./dist/index.js"
+      "import": "./dist/index.mjs"
     }
   },
   "repository": {

@@ -10,5 +10,10 @@ export default defineConfig({
   clean: true,
   platform: 'node',
   dts: true,
-  external: [], // optional: you can exclude some deps if needed
+  external: [],
+  outExtension({ format }) {
+    return {
+      js: format === 'cjs' ? '.cjs' : '.mjs',
+    }
+  }
 });
