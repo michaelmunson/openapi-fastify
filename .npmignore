@@ -3,5 +3,6 @@ src
 .npmignore
 README.md
 tsup.config.ts
+jest.config.ts
 sh/
 tests/
