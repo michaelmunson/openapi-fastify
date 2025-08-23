@@ -3,4 +3,5 @@ src
 .npmignore
 README.md
 tsup.config.ts
-deploy
+sh/
+tests/

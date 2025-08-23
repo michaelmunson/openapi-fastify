@@ -1,6 +1,44 @@
 import { FastifyInstance } from "fastify";
 import { MethodFromSpec, MethodRecord, OpenApiPathOperator, Operator, OperatorName, RefStrings, RefStringToRecord } from "./types";
 import { RouterOptions } from "./types/router.types";
+import { modifyHandler } from "./utils";
+
+/**
+ * OpenApiRouter is a class that integrates OpenAPI specifications with Fastify routing.
+ * 
+ * @template T - The type representing the OpenAPI document.
+ * 
+ * @property {Array<{ path: string; methods: MethodRecord }>} routes - Stores the registered routes and their method handlers.
+ * @property {FastifyInstance} app - The Fastify instance used for registering routes.
+ * @property {T} document - The OpenAPI document used for schema references and validation.
+ * @property {RouterOptions} options - Optional configuration for the router.
+ * 
+ * @class
+ * 
+ * @example
+ * ```typescript
+ * import Fastify from "fastify";
+ * import { OpenApiRouter } from "./router";
+ * 
+ * const app = Fastify();
+ * const openApiDoc = { ... }; // Your OpenAPI document/specification
+ * const router = new OpenApiRouter(app, openApiDoc);
+ * 
+ * router.route("/hello", {
+ *   get: router.op(
+ *     {
+ *       operationId: "getHello",
+ *       responses: { 200: { description: "Hello response" } }
+ *     },
+ *     async (request, reply) => {
+ *       reply.send({ message: "Hello, world!" });
+ *     }
+ *   )
+ * });
+ * 
+ * router.initialize();
+ * ```
+ */
 
 export class OpenApiRouter<T> {
   routes: Array<{
@@ -22,7 +60,7 @@ export class OpenApiRouter<T> {
   op<T extends OpenApiPathOperator>(specification: T, handler: MethodFromSpec<T>): Operator<T> {
     return {
       specification,
-      handler
+      handler: modifyHandler(specification, handler, this.options)
     }
   }
 
