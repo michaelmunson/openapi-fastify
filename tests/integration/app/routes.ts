@@ -57,15 +57,7 @@ $.route("/users", {
             "application/json": {
               schema: {
                 type: "array",
-                items: {
-                  type: "object",
-                  properties: {
-                    id: { type: "integer" },
-                    username: { type: "string" },
-                    email: { type: "string" },
-                    role: { type: "string" }
-                  }
-                }
+                items: $.ref('#/components/schemas/User')
               }
             }
           }
@@ -118,15 +110,7 @@ $.route("/users/:id", {
           description: "User object",
           content: {
             "application/json": {
-              schema: {
-                type: "object",
-                properties: {
-                  id: { type: "integer" },
-                  username: { type: "string" },
-                  email: { type: "string" },
-                  role: { type: "string" }
-                }
-              }
+              schema: $.ref('#/components/schemas/User')
             }
           }
         },

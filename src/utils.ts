@@ -117,3 +117,5 @@ export const modifyHandler = <T extends OpenApiPathOperator>(specification: T, m
     return await method(request, reply);
   }
 }
+
+export const replacePathWithOpenApiParams = (path: string) => path.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, "{$1}");

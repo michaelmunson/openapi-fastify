@@ -58,3 +58,22 @@ export type RefStringToRecord<Document, Ref> =
         : never
       : never
     : never;
+
+  /**
+   * Given an OpenAPI Document and a reference string, resolves the referenced object
+   * from any section of the OpenAPI components object (schemas, responses, parameters, etc).
+   * 
+   * Example:
+   *   RefStringToComponentRecord<MyDoc, "#/components/schemas/User">
+   *   RefStringToComponentRecord<MyDoc, "#/components/responses/NotFound">
+   */
+  export type RefStringToComponentRecord<Document, Ref extends string> =
+    Ref extends `#/components/${infer Section}/${infer Name}`
+      ? Document extends { components: Record<string, any> }
+        ? Section extends keyof Document['components']
+          ? Name extends keyof Document['components'][Section]
+            ? Document['components'][Section][Name]
+            : never
+          : never
+        : never
+      : never;

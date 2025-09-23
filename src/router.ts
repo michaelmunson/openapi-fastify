@@ -1,7 +1,7 @@
 import { FastifyInstance } from "fastify";
-import { MethodFromSpec, MethodRecord, OpenApiPathOperator, Operator, OperatorName, RefStrings, RefStringToRecord } from "./types";
+import { MethodFromSpec, MethodRecord, OpenApiPathOperator, Operator, OperatorName, RefStrings, RefStringToComponentRecord, RefStringToRecord } from "./types";
 import { RouterOptions } from "./types/router.types";
-import { modifyHandler } from "./utils";
+import { modifyHandler, replacePathWithOpenApiParams } from "./utils";
 
 /**
  * OpenApiRouter is a class that integrates OpenAPI specifications with Fastify routing.
@@ -41,7 +41,7 @@ import { modifyHandler } from "./utils";
  */
 
 export class OpenApiRouter<T> {
-  routes: Array<{
+  readonly routes: Array<{
     path: string;
     methods: MethodRecord;
   }> = [];
@@ -64,9 +64,14 @@ export class OpenApiRouter<T> {
     }
   }
 
-  ref<S extends RefStrings<T>>(ref: S): RefStringToRecord<T, S> {
+  ref<S extends RefStrings<T>>(ref: S, {useRef}: {useRef: boolean} = {useRef: false}): RefStringToComponentRecord<T, S> {
     const [,,schema] = (ref as string).replace('#/', '').split('/');
     const component = (this.document as any).components.schemas[schema];
+    if (useRef) {
+      return {
+        $ref: ref
+      } as any
+    }
     return {
       ...component
     } as any
@@ -83,5 +88,20 @@ export class OpenApiRouter<T> {
       }
     }
     return this.app;
+  }
+
+  get specification() {
+    const newSpec = {...this.document} as any;
+    if (!newSpec.paths) newSpec.paths = {};
+    for (const {path:rawPath, methods} of this.routes) {
+      const path = replacePathWithOpenApiParams(rawPath);
+      newSpec.paths[path] = newSpec.paths[path] || {};
+      for (const [_method, {specification:originalSpec, handler}] of Object.entries(methods)) {
+        const method = _method as OperatorName;
+        const specification = this.options.specModifier ? this.options.specModifier(originalSpec) : originalSpec;
+        newSpec.paths[path][method] = specification;
+      }
+    }
+    return newSpec;
   }
 }
