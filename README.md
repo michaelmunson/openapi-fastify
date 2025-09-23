@@ -22,24 +22,51 @@ npm install openapi-fastify
 ### 1. Create your Fastify app
 
 ```typescript
+/* app.ts */
+
 import Fastify from 'fastify'
 import { OpenApiRouter } from 'openapi-fastify'
-import specification from './path/to/specification'
 
-const app = Fastify()
+// * make sure to use <const>
+export const specification = <const>{
+  openapi: "3.0.0",
+  info: {
+    title: "Hello World API",
+    version: "1.0.0",
+    description: "A simple Hello World OpenAPI specification"
+  },
+  components: {
+    schemas: {
+      User: {
+        type: 'object',
+        properties: {
+          id: { type: 'string' },
+          username: { type: 'string' },
+          email: { type: 'string' },
+          role: { type: 'string' }
+        }
+      }
+    }
+  }
+};
+
+export const app = Fastify()
 
 export const $ = new OpenApiRouter(app, specification)
-
-export default app
 ```
 
 ### 2. Define your routes
 
 ```typescript
+/* routes.ts */
+
+import {$} from './app';
+
 $.route('/users/:user_id/data', {
   get: $.op({
     summary: 'Get user data',
     tags: ['user data'],
+    // * make sure to use <const>
     parameters: <const>[
       {
         name: 'user_id',
@@ -66,7 +93,7 @@ $.route('/users/:user_id/data', {
         description: 'User data object',
         content: {
           'application/json': {
-            schema: $.ref('#/components/schemas/UserData')
+            schema: $.ref('#/components/schemas/User')
           }
         }
       }
@@ -123,7 +150,7 @@ $.route('/users/:user_id/data', {
         description: 'The created user data',
         content: {
           'application/json': {
-            schema: $.ref('#/components/schemas/UserData')
+            schema: $.ref('#/components/schemas/User')
           }
         }
       }
@@ -143,6 +170,8 @@ $.route('/users/:user_id/data', {
 ### 3. Initialize and start your server
 
 ```typescript
+/* server.ts */
+
 import app, {$} from './app';
 import './routes';
 
@@ -157,6 +186,18 @@ app.listen({ port: PORT }, (err) => {
   }
   console.log(`SERVER:${PORT}`)
 })
+```
+
+### 4. Generate your OpenAPI Specification
+```typescript
+/* docs.ts */
+import fs from 'fs';
+import {$} from './app';
+import './routes.ts';
+
+const spec = $.specification;
+
+fs.writeFileSync('./api-definition.json', JSON.stringify(spec, null, 2));
 ```
 
 ## API Reference
@@ -198,12 +239,14 @@ Creates an operation handler with OpenAPI specification and type-safe handler fu
 
 **Returns:** Operator object
 
-##### `ref(ref: string)`
+##### `ref(ref: string, options?:{useRef: boolean})`
 
 Creates a reference to a schema in the OpenAPI document.
 
 **Parameters:**
-- `ref`: Schema reference string (e.g., `#/components/schemas/UserData`)
+- `ref`: Schema reference string (e.g., `#/components/schemas/User`)
+- `options` :
+  - `useRef` : if true, returns {$ref: ...}, else returns actual definition object 
 
 **Returns:** Referenced schema object
 
@@ -276,7 +319,7 @@ Define multiple response types with different status codes and content types.
 Use `$.ref()` to reference schemas defined in your OpenAPI document:
 
 ```typescript
-schema: $.ref('#/components/schemas/UserData')
+schema: $.ref('#/components/schemas/User')
 ```
 
 ## Configuration Options
