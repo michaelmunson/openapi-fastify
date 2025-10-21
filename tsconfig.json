@@ -20,7 +20,9 @@
     "inlineSources": true,
     "experimentalDecorators": true,
     "strictPropertyInitialization": false,
-    "resolveJsonModule": true
+    "resolveJsonModule": true,
+    "skipLibCheck": true
   },
+  "include": ["src"],
   "exclude": ["tests"]
 }

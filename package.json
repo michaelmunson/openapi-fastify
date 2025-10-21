@@ -7,7 +7,8 @@
   "scripts": {
     "build": "tsup",
     "deploy": "./sh/deploy",
-    "test": "./sh/test"
+    "test": "./sh/test",
+    "create:docs": "typedoc --out ./docs ./src/index.ts"
   },
   "exports": {
     ".": {
@@ -42,6 +43,7 @@
     "ts-jest": "^29.4.1",
     "ts-node": "^10.9.2",
     "tsup": "^8.5.0",
+    "typedoc": "^0.28.14",
     "typescript": "^5.9.2"
   }
 }
