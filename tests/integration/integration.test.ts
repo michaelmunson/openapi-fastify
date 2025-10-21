@@ -1,7 +1,7 @@
 import {describe, it, expect} from "@jest/globals";
 
-const hitMockServer = async (route: `/${string}`, options?:RequestInit) => {
-  return await fetch(`http://localhost:${process.env.PORT!}${route}`, {
+export const hitMockServer = async (route: `/${string}`, options?:RequestInit) => {
+  return await fetch(`http://localhost:${process.env.PORT! || 1234}${route}`, {
     ...options,
   });
 };

@@ -1,15 +1,16 @@
-# OpenAPI Fastify Router
+# OpenAPI Fastify
 
-A TypeScript-first OpenAPI router for Fastify that provides full type safety and automatic OpenAPI specification generation.
+A powerful TypeScript library that seamlessly integrates OpenAPI specifications with Fastify routing, providing type-safe API development with automatic validation and comprehensive documentation generation.
 
 ## Features
 
-- 🚀 **Type-Safe**: Full TypeScript support with automatic type inference
-- 📝 **OpenAPI Integration**: Automatic OpenAPI specification generation
-- ⚡ **Fastify Native**: Built specifically for Fastify with optimal performance
-- 🛡️ **Schema Parsing & Enforcement**: Built-in parsing and validation of query parameters and request bodies according to your OpenAPI schemas
-- 🔧 **Flexible**: Support for all HTTP methods and OpenAPI features
-- 🎯 **Simple API**: Clean and intuitive API design
+- **Type-Safe Routing**: Full TypeScript support with compile-time type checking
+- **OpenAPI Integration**: Native OpenAPI 3.0 specification support
+- **Automatic Validation**: Built-in request/response validation using AJV
+- **Schema References**: Easy component schema referencing with `$ref` support
+- **Route Registration**: Simple, intuitive route definition syntax
+- **Documentation Generation**: Automatic OpenAPI specification generation
+- **Fastify Integration**: Built specifically for Fastify with full compatibility
 
 ## Installation
 
@@ -19,460 +20,415 @@ npm install openapi-fastify
 
 ## Quick Start
 
-### 1. Create your Fastify app
+### 1. Basic Setup
 
 ```typescript
-/* app.ts */
+import Fastify from 'fastify';
+import { OpenApiRouter } from 'openapi-fastify';
 
-import Fastify from 'fastify'
-import { OpenApiRouter } from 'openapi-fastify'
-
-// * make sure to use <const>
-export const specification = <const>{
+// Create your OpenAPI specification
+const openApiDoc = {
   openapi: "3.0.0",
   info: {
-    title: "Hello World API",
-    version: "1.0.0",
-    description: "A simple Hello World OpenAPI specification"
+    title: "My API",
+    version: "1.0.0"
   },
   components: {
     schemas: {
       User: {
         type: 'object',
         properties: {
-          id: { type: 'string' },
+          id: { type: 'number' },
           username: { type: 'string' },
-          email: { type: 'string' },
-          role: { type: 'string' }
-        }
+          email: { type: 'string' }
+        },
+        required: ['id', 'username', 'email']
       }
     }
   }
 };
 
-export const app = Fastify()
-
-export const $ = new OpenApiRouter(app, specification)
+// Initialize Fastify and router
+const app = Fastify();
+const router = new OpenApiRouter(app, openApiDoc);
 ```
 
-### 2. Define your routes
+### 2. Define Routes
 
 ```typescript
-/* routes.ts */
-
-import {$} from './app';
-
-$.route('/users/:user_id/data', {
-  get: $.op({
-    summary: 'Get user data',
-    tags: ['user data'],
-    // * make sure to use <const>
-    parameters: <const>[
-      {
-        name: 'user_id',
-        in: 'path',
-        required: true,
-        schema: {
-          type: 'string'
-        },
-        description: 'The ID of the user'
-      },
-      {
-        name: 'include_details',
-        in: 'query',
-        required: false,
-        schema: {
-          type: 'boolean',
-          default: false
-        },
-        description: 'Whether to include detailed user information'
-      }
-    ],
-    responses: {
-      200: {
-        description: 'User data object',
-        content: {
-          'application/json': {
-            schema: $.ref('#/components/schemas/User')
-          }
-        }
-      }
-    }
-  }, async (request, reply) => {
-    const { user_id } = request.params // fully typed
-    const { include_details = false } = request.query // fully typed
-    const userData = {
-      id: user_id,
-      name: "John Doe",
-      email: "john.doe@example.com",
-      details: include_details ? { age: 30, address: "123 Main St" } : undefined
-    };
-    return userData;
-  }),
-  post: $.op({
-    summary: 'Create user data',
-    tags: ['user data'],
-    parameters: <const>[
-      {
-        name: 'user_id',
-        in: 'path',
-        required: true,
-        schema: {
-          type: 'string'
-        },
-        description: 'The ID of the user'
-      }
-    ],
-    requestBody: {
-      content: {
-        'application/json': {
-          schema: {
-            type: 'object',
-            properties: {
-              name: { type: 'string', description: 'The name of the user' },
-              email: { type: 'string', description: 'The email of the user' },
-              details: {
-                type: 'object',
+// Simple GET route
+router.route("/hello", {
+  get: router.op(
+    {
+      summary: "Say Hello",
+      responses: {
+        200: {
+          description: "A hello world message",
+          content: {
+            "application/json": {
+              schema: {
+                type: "object",
                 properties: {
-                  age: { type: 'integer', description: 'Age of the user' },
-                  address: { type: 'string', description: 'Address of the user' }
-                },
-                required: []
+                  message: { type: "string" }
+                }
               }
-            },
-            required: ['name', 'email']
+            }
           }
         }
       }
     },
-    responses: {
-      200: {
-        description: 'The created user data',
+    async () => {
+      return { message: "Hello, world!" };
+    }
+  )
+});
+
+// POST route with request body validation
+router.route("/users", {
+  post: router.op(
+    {
+      summary: "Create a new user",
+      requestBody: {
+        required: true,
         content: {
-          'application/json': {
-            schema: $.ref('#/components/schemas/User')
+          "application/json": {
+            schema: router.ref('#/components/schemas/User')
+          }
+        }
+      },
+      responses: {
+        201: {
+          description: "User created",
+          content: {
+            "application/json": {
+              schema: router.ref('#/components/schemas/User')
+            }
           }
         }
       }
+    },
+    async (request, reply) => {
+      const user = request.body; // Fully typed!
+      // Process user creation...
+      reply.code(201);
+      return user;
     }
-  }, async (request) => {
-    const { user_id } = request.params as { user_id: string };
-    const body = request.body // fully typed
-    const createdUser = {
-      id: user_id,
-      ...body
-    };
-    return createdUser;
-  })
+  )
 });
 ```
 
-### 3. Initialize and start your server
+### 3. Initialize and Start
 
 ```typescript
-/* server.ts */
+// Register all routes with Fastify
+router.initialize();
 
-import app, {$} from './app';
-import './routes';
-
-$.initialize();
-
-const PORT = parseInt(process.env.PORT || '1234');
-
-app.listen({ port: PORT }, (err) => {
-  if (err) {
-    console.log('ERROR', err);
-    process.exit(1)
-  }
-  console.log(`SERVER:${PORT}`)
-})
-```
-
-### 4. Generate your OpenAPI Specification
-```typescript
-/* docs.ts */
-import fs from 'fs';
-import {$} from './app';
-import './routes.ts';
-
-const spec = $.specification;
-
-fs.writeFileSync('./api-definition.json', JSON.stringify(spec, null, 2));
+// Start the server
+app.listen({ port: 3000 }, (err, address) => {
+  if (err) throw err;
+  console.log(`Server listening at ${address}`);
+});
 ```
 
 ## API Reference
 
 ### OpenApiRouter
 
-The main router class that handles route registration and OpenAPI integration.
+The main class for creating type-safe OpenAPI routes.
 
 #### Constructor
 
 ```typescript
-new OpenApiRouter(app: FastifyInstance, document: OpenApiDocument, options?: RouterOptions)
+new OpenApiRouter<T>(app: FastifyInstance, document: T, options?: RouterOptions)
 ```
 
-**Parameters:**
 - `app`: Fastify instance
 - `document`: OpenAPI specification document
-- `options`: Optional router configuration
+- `options`: Optional configuration (see RouterOptions)
 
 #### Methods
 
-##### `route(path: string, methods: MethodRecord)`
+##### `route(path: string, methods: OperatorRecord)`
 
 Registers a new route with the specified path and HTTP methods.
 
-**Parameters:**
-- `path`: Route path (supports path parameters)
-- `methods`: Object containing HTTP method handlers
+```typescript
+router.route("/users/:id", {
+  get: router.op(/* specification */, /* handler */),
+  put: router.op(/* specification */, /* handler */),
+  delete: router.op(/* specification */, /* handler */)
+});
+```
 
-**Returns:** Route object
-
-##### `op(specification: OpenApiPathOperator, handler: MethodFromSpec)`
+##### `op<T>(specification: T, handler: FromSpec.Method<T>)`
 
 Creates an operation handler with OpenAPI specification and type-safe handler function.
 
-**Parameters:**
-- `specification`: OpenAPI operation specification
-- `handler`: Type-safe request handler function
+```typescript
+const operation = router.op(
+  {
+    summary: "Get user by ID",
+    parameters: [
+      {
+        name: "id",
+        in: "path",
+        required: true,
+        schema: { type: "integer" }
+      }
+    ],
+    responses: {
+      200: {
+        description: "User object",
+        content: {
+          "application/json": {
+            schema: router.ref('#/components/schemas/User')
+          }
+        }
+      }
+    }
+  },
+  async (request, reply) => {
+    const { id } = request.params; // Fully typed!
+    // Implementation...
+  }
+);
+```
 
-**Returns:** Operator object
-
-##### `ref(ref: string, options?:{useRef: boolean})`
+##### `ref<S>(ref: S, options?: { useRef?: boolean })`
 
 Creates a reference to a schema in the OpenAPI document.
 
-**Parameters:**
-- `ref`: Schema reference string (e.g., `#/components/schemas/User`)
-- `options` :
-  - `useRef` : if true, returns {$ref: ...}, else returns actual definition object 
+```typescript
+// Get the actual schema object
+const userSchema = router.ref('#/components/schemas/User');
 
-**Returns:** Referenced schema object
+// Get a $ref object
+const userRef = router.ref('#/components/schemas/User', { useRef: true });
+```
+
+##### `spec<T>(specification: T)`
+
+Creates a new OpenAPI specification object.
+
+```typescript
+const spec = router.spec({
+  summary: "Create a new user",
+  requestBody: {
+    required: true,
+    content: {
+      "application/json": {
+        schema: router.ref('#/components/schemas/User')
+      }
+    }
+  }
+});
+```
+
+##### `handler<T>(handler: FromSpec.Method<T>)`
+
+Creates a handler function with the specified OpenAPI specification.
+
+```typescript
+const handler = router.handler<typeof spec>(async (request) => {
+  return { id: 1, username: "alice" };
+});
+```
 
 ##### `initialize()`
 
-Registers all routes with Fastify and returns the app instance.
-
-**Returns:** Fastify instance
-
-## Type Safety
-
-The library provides full TypeScript support with automatic type inference:
-
-### Request Parameters
-
-Path parameters are automatically typed based on your OpenAPI specification:
+Initializes the router and registers all routes with Fastify.
 
 ```typescript
-const { user_id } = request.params // Type: { user_id: string }
+router.initialize();
 ```
 
-### Query Parameters
+##### `get specification`
 
-Query parameters are typed according to their schema:
+Returns the complete OpenAPI specification including all registered routes.
 
 ```typescript
-const { include_details } = request.query // Type: { include_details?: boolean }
+const spec = router.specification;
+console.log(JSON.stringify(spec, null, 2));
 ```
 
-### Request Body
-
-Request body is typed based on the OpenAPI schema:
-
-```typescript
-const body = request.body // Type: { name: string; email: string; details?: { age: number; address: string } }
-```
-
-## Supported HTTP Methods
-
-The library supports all standard HTTP methods:
-
-- `GET`
-- `POST`
-- `PUT`
-- `DELETE`
-- `PATCH`
-- `OPTIONS`
-- `HEAD`
-
-## OpenAPI Features
-
-### Parameters
-
-Support for all parameter types:
-- Path parameters
-- Query parameters
-- Header parameters
-- Cookie parameters
-
-### Request Body
-
-Full support for request body validation with JSON schema.
-
-### Responses
-
-Define multiple response types with different status codes and content types.
-
-### Schema References
-
-Use `$.ref()` to reference schemas defined in your OpenAPI document:
-
-```typescript
-schema: $.ref('#/components/schemas/User')
-```
-
-## Configuration Options
+## Configuration
 
 ### RouterOptions
 
 ```typescript
 interface RouterOptions {
-  /**
-   * A function that modifies the OpenAPI specification.
-   * @param spec - The OpenAPI specification.
-   * @returns The modified OpenAPI specification.
-   */
-  specModifier?: (spec: OpenApiPathOperator) => OpenApiPathOperator;
-  
-  /**
-   * Whether to parse query parameters.
-   * If true, the query parameters will be parsed according to that query parameter's schema type.
-   * @default false
-   */
-  parseQueryParams?: boolean;
-  
-  /**
-   * Whether to enforce the request body schema.
-   * If true, the request body will be validated against the schema.
-   * @default false
-   */
-  enforceRequestBodySchema?: boolean;
-  
-  /**
-   * Whether to parse the request body.
-   * If true, the request body will be parsed according to that request body's schema type.
-   * This includes applying defaults to the request body.
-   * @default false
-   */
-  parseRequestBody?: boolean;
+  specModifier?: (spec: OpenAPI.Operator) => OpenAPI.Operator;
+  autoValidate?: {
+    request?: {
+      validate?: boolean;
+      errorResponse?: {
+        status: number;
+        payload: Record<string, any> | ((errors: ErrorObject[]) => Record<string, any>);
+      };
+    };
+    response?: {
+      validate?: boolean;
+      errorResponse?: {
+        status: number;
+        payload: Record<string, any> | ((errors: ErrorObject[]) => Record<string, any>);
+      };
+    };
+  };
 }
 ```
 
-#### Option Details
+### Auto Validation
 
-- **`specModifier`**: Optional function to modify OpenAPI specifications before registration
-- **`parseQueryParams`**: When enabled, automatically converts query parameters to their proper types (string, integer, number, boolean) based on the OpenAPI schema
-- **`enforceRequestBodySchema`**: When enabled, validates incoming request bodies against the OpenAPI schema and returns a 400 error if validation fails
-- **`parseRequestBody`**: When enabled, applies default values from the OpenAPI schema to missing properties in the request body
-
-#### Example Usage
+Enable automatic request and response validation:
 
 ```typescript
-const $ = new OpenApiRouter(app, specification, {
-  parseQueryParams: true,
-  enforceRequestBodySchema: true,
-  parseRequestBody: true
+const router = new OpenApiRouter(app, openApiDoc, {
+  autoValidate: {
+    request: {
+      validate: true,
+      errorResponse: {
+        status: 400,
+        payload: { error: "Invalid request body", errors: [] }
+      }
+    },
+    response: {
+      validate: true,
+      errorResponse: {
+        status: 500,
+        payload: { error: "Invalid response", errors: [] }
+      }
+    }
+  }
 });
 ```
 
-## Examples
+## Advanced Usage
 
-### Basic CRUD Operations
+### Custom Schema Modifiers
 
 ```typescript
-$.route('/users', {
-  get: $.op({
-    summary: 'List all users',
-    responses: {
-      200: {
-        description: 'List of users',
-        content: {
-          'application/json': {
-            schema: {
-              type: 'array',
-              items: $.ref('#/components/schemas/User')
+const router = new OpenApiRouter(app, openApiDoc, {
+  specModifier: (spec) => ({
+    ...spec,
+    tags: ['api'],
+    security: [{ bearerAuth: [] }]
+  })
+});
+```
+
+### Complex Route Definitions
+
+```typescript
+router.route("/users/:id/posts", {
+  get: router.op(
+    {
+      summary: "Get posts by user ID",
+      parameters: [
+        {
+          name: "id",
+          in: "path",
+          required: true,
+          schema: { type: "integer" }
+        },
+        {
+          name: "limit",
+          in: "query",
+          required: false,
+          schema: { type: "integer", minimum: 1, maximum: 100 }
+        }
+      ],
+      responses: {
+        200: {
+          description: "List of posts",
+          content: {
+            "application/json": {
+              schema: {
+                type: "array",
+                items: {
+                  type: "object",
+                  properties: {
+                    id: { type: "integer" },
+                    title: { type: "string" },
+                    content: { type: "string" }
+                  }
+                }
+              }
             }
           }
         }
       }
-    }
-  }, async (request, reply) => {
-    return [{ id: '1', name: 'John' }];
-  }),
-  
-  post: $.op({
-    summary: 'Create a new user',
-    requestBody: {
-      content: {
-        'application/json': {
-          schema: $.ref('#/components/schemas/CreateUser')
-        }
-      }
     },
-    responses: {
-      201: {
-        description: 'User created',
-        content: {
-          'application/json': {
-            schema: $.ref('#/components/schemas/User')
-          }
-        }
-      }
+    async (request, reply) => {
+      const { id } = request.params;
+      const { limit } = request.query;
+      // Implementation...
     }
-  }, async (request) => {
-    const userData = request.body;
-    return { id: '2', ...userData };
-  })
+  )
 });
 ```
 
-### Complex Parameters
+## Type Safety
+
+The library provides full TypeScript support with compile-time type checking:
+
+- **Request Parameters**: Automatically typed based on path parameters
+- **Query Parameters**: Type-safe query parameter access
+- **Request Body**: Fully typed request body based on OpenAPI schema
+- **Response Types**: Response types inferred from OpenAPI specification
+- **Handler Functions**: Type-safe handler function signatures
+
+## Error Handling
+
+Built-in error handling for validation failures:
 
 ```typescript
-$.route('/search', {
-  get: $.op({
-    summary: 'Search with complex parameters',
-    parameters: <const>[
-      {
-        name: 'q',
-        in: 'query',
-        required: true,
-        schema: { type: 'string' }
-      },
-      {
-        name: 'page',
-        in: 'query',
-        required: false,
-        schema: { type: 'integer', default: 1 }
-      },
-      {
-        name: 'limit',
-        in: 'query',
-        required: false,
-        schema: { type: 'integer', default: 10, maximum: 100 }
-      },
-      {
-        name: 'filters',
-        in: 'query',
-        required: false,
-        schema: { type: 'string' } // JSON string
-      }
-    ],
-    responses: {
-      200: {
-        description: 'Search results',
-        content: {
-          'application/json': {
-            schema: $.ref('#/components/schemas/SearchResults')
-          }
-        }
+// Custom error responses
+const router = new OpenApiRouter(app, openApiDoc, {
+  autoValidate: {
+    request: {
+      validate: true,
+      errorResponse: {
+        status: 422,
+        payload: (errors) => ({
+          error: "Validation failed",
+          details: errors
+        })
       }
     }
-  }, async (request) => {
-    const { q, page = 1, limit = 10, filters } = request.query;
-    // All parameters are fully typed
-    return { results: [], total: 0, page, limit };
-  })
+  }
 });
 ```
+
+## Development
+
+### Building
+
+```bash
+npm run build
+```
+
+### Testing
+
+```bash
+npm test
+```
+
+### Debug Mode
+
+Enable debug logging by setting the `DEBUG` environment variable:
+
+```bash
+DEBUG=true npm start
+```
+
+## License
+
+ISC
+
+## Contributing
+
+Contributions are welcome! Please feel free to submit a Pull Request.
+
+## Support
+
+For issues and questions, please visit the [GitHub repository](https://github.com/michaelmunson/openapi-fastify).

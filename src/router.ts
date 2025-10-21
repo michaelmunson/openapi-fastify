@@ -1,7 +1,8 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import {OpenAPI, FromSpec, Router} from ".";
+import { OpenAPI, FromSpec, Router } from ".";
 import { RouterOptions } from "./types/router.types";
-import { AUTO_VALIDATION_DEFAULTS, replacePathWithOpenApiParams, validateRequestBody, validateResponse } from "./utils";
+import { AUTO_VALIDATION_DEFAULTS, debugLog, replacePathWithOpenApiParams, validateRequestBody, validateResponse } from "./utils";
+import Ajv from "ajv";
 
 /**
  * OpenApiRouter is a class that integrates OpenAPI specifications with Fastify routing.
@@ -46,7 +47,7 @@ export class OpenApiRouter<T> {
     methods: Router.OperatorRecord;
   }> = [];
 
-  constructor(readonly app: FastifyInstance, readonly document: T, readonly options:RouterOptions={}) {}
+  constructor(readonly app: FastifyInstance, readonly document: T, readonly options: RouterOptions = {}) { }
 
   /**
    * @description
@@ -83,7 +84,7 @@ export class OpenApiRouter<T> {
       });
   * ```
    */
-  route(path:string, methods:Router.OperatorRecord) {
+  route(path: string, methods: Router.OperatorRecord) {
     const route = {
       path,
       methods
@@ -147,8 +148,8 @@ export class OpenApiRouter<T> {
    * $.ref('#/components/schemas/User', {useRef: true}) // returns `{$ref: '#/components/schemas/User'}`
    * ```
    */
-  ref<S extends FromSpec.Refs<T>>(ref: S, {useRef}: {useRef?: boolean} = {useRef: false}): FromSpec.ComponentFromRef<T, S> {
-    const [,,schema] = (ref as string).replace('#/', '').split('/');
+  ref<S extends FromSpec.Refs<T>>(ref: S, { useRef }: { useRef?: boolean } = { useRef: false }): FromSpec.ComponentFromRef<T, S> {
+    const [, , schema] = (ref as string).replace('#/', '').split('/');
     const component = (this.document as any).components.schemas[schema];
     if (useRef) {
       return {
@@ -181,8 +182,8 @@ export class OpenApiRouter<T> {
    * })
    * ```
    */
-  spec<T extends OpenAPI.Operator>(specification: T){
-    return {...specification} as const;
+  spec<T extends OpenAPI.Operator>(specification: T) {
+    return { ...specification } as const;
   }
 
   /**
@@ -218,7 +219,7 @@ export class OpenApiRouter<T> {
    * })
    * ```
    */
-  handler<T extends OpenAPI.Operator>(handler: FromSpec.Method<T>){
+  handler<T extends OpenAPI.Operator>(handler: FromSpec.Method<T>) {
     return handler;
   }
 
@@ -232,8 +233,8 @@ export class OpenApiRouter<T> {
    * ```
    */
   initialize() {
-    for (const {path, methods} of this.routes) {
-      for (const [_method, {specification:originalSpec, handler}] of Object.entries(methods) as [Router.OperatorName, Router.Operator<OpenAPI.Operator>][]) {
+    for (const { path, methods } of this.routes) {
+      for (const [_method, { specification: originalSpec, handler }] of Object.entries(methods) as [Router.OperatorName, Router.Operator<OpenAPI.Operator>][]) {
         const method = _method;
         const specification = this.options.specModifier ? this.options.specModifier(originalSpec) : originalSpec;
         this.app[method](path, {
@@ -241,12 +242,14 @@ export class OpenApiRouter<T> {
         }, handler);
       }
     }
-    if (this.options.autoValidate){
-      const {request, response} = this.options.autoValidate;
-      if (request) {
+    if (this.options.autoValidate) {
+      const { request, response } = this.options.autoValidate;
+      if (request && request.validate) {
+        debugLog('Applying preValidation hook')
         this.app.addHook('preValidation', this.hooks.preValidation);
       }
-      if (response) {
+      if (response && response.validate) {
+        debugLog('Applying preSerialization hook')
         this.app.addHook('preSerialization', this.hooks.preSerialization);
       }
     }
@@ -265,12 +268,12 @@ export class OpenApiRouter<T> {
    * ```
    */
   get specification() {
-    const newSpec = {...this.document} as any;
+    const newSpec = { ...this.document } as any;
     if (!newSpec.paths) newSpec.paths = {};
-    for (const {path:rawPath, methods} of this.routes) {
+    for (const { path: rawPath, methods } of this.routes) {
       const path = replacePathWithOpenApiParams(rawPath);
       newSpec.paths[path] = newSpec.paths[path] || {};
-      for (const [_method, {specification:originalSpec}] of Object.entries(methods)) {
+      for (const [_method, { specification: originalSpec }] of Object.entries(methods)) {
         const method = _method as Router.OperatorName;
         const specification = this.options.specModifier ? this.options.specModifier(originalSpec) : originalSpec;
         newSpec.paths[path][method] = specification;
@@ -282,37 +285,55 @@ export class OpenApiRouter<T> {
   //////////////////////// PRIVATE METHODS ////////////////////////
 
   private readonly hooks = {
-    preValidation: (request: FastifyRequest, reply: FastifyReply) => {
-      const method = request.method;
-      const route = request.routeOptions.url;
-      if (method === "GET" || !route) return;
+    preValidation: async (request: FastifyRequest, reply: FastifyReply) => {
+      const payload = request.body;
+      const method = request.method.toLowerCase();
+      const route = replacePathWithOpenApiParams(request.routeOptions.url ?? '');
+      debugLog('preValidation', method, route);
+      if (method === "get" || !route || !payload) return;
       const paths = this.specification.paths
-      const reqBodySpec = (paths as any)?.[route]?.[method]?.['requestBody'];
+      const reqBodyContent = (paths as any)?.[route]?.[method]?.['requestBody']?.['content'];
+      const reqBodySpec = (Object.values(reqBodyContent)[0] as { schema?: any })?.schema;
+      debugLog('Request Body Spec', reqBodySpec);
+      debugLog('Payload', payload)
       if (!reqBodySpec) return;
-      const {isValid, errors} = validateRequestBody(reqBodySpec, request);
+      const validate = new Ajv().compile(reqBodySpec)
+      const isValid = validate(payload);
+      const errors = validate.errors;
+      debugLog('Validation Result', isValid, errors);
       if (!isValid) {
         const status = this.options?.autoValidate?.request?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.request.errorResponse.status;
-        const payload = this.options?.autoValidate?.request?.errorResponse?.payload || {...AUTO_VALIDATION_DEFAULTS.request.errorResponse.payload, errors};
-        reply.status(status).send(payload);
+        const payload = this.options?.autoValidate?.request?.errorResponse?.payload || { ...AUTO_VALIDATION_DEFAULTS.request.errorResponse.payload, errors };
+        reply.status(status).send(typeof payload === 'function' ? payload(errors || []) : payload);
+        // return typeof payload === 'function' ? payload(errors || []) : payload;
       }
-      return;
     },
-    preSerialization: (request: FastifyRequest, reply: FastifyReply, payload: any) => {
-      const method = request.method;
-      const route = request.routeOptions.url;
+    preSerialization: async (request: FastifyRequest, reply: FastifyReply, payload: any) => {
+      const method = request.method.toLowerCase();
+      const route = replacePathWithOpenApiParams(request.routeOptions.url ?? '');
+      if (!payload) return
+      console.log('Route', route);
       const status = reply.statusCode;
-      if (!route) return;
-      const paths = this.specification.paths
-      const resBodySpec = (paths as any)?.[route]?.[method]?.['responses']?.[status.toString()];
+      console.log('Status', status)
+      const paths = this.specification.paths;
+      console.log('Paths', Object.keys(paths), (paths as any)[route][method])
+      const resBodyContent = (paths as any)?.[route]?.[method]?.['responses']?.[status.toString()]?.['content'] ?? {};
+      const resBodySpec = (Object.values(resBodyContent)[0] as { schema?: any })?.schema;
+      debugLog('Response Body Spec', JSON.stringify(resBodySpec));
+      debugLog('Payload', payload)
       if (!resBodySpec) return;
-      const {isValid, errors} = validateResponse(resBodySpec, reply, payload);
+      const validate = new Ajv().compile(resBodySpec)
+      const isValid = validate(payload);
+      const errors = validate.errors;
+      // const { isValid, errors } = validateResponse(resBodySpec, reply, payload);
+      debugLog('Validation Result', isValid, errors);
       if (!isValid) {
         const status = this.options?.autoValidate?.response?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.response.errorResponse.status;
-        const payload = this.options?.autoValidate?.response?.errorResponse?.payload || {...AUTO_VALIDATION_DEFAULTS.response.errorResponse.payload, errors};
-        reply.status(status).send(payload);
+        const payload = this.options?.autoValidate?.response?.errorResponse?.payload || { ...AUTO_VALIDATION_DEFAULTS.response.errorResponse.payload, errors };
+        reply.status(status);
+        return typeof payload === 'function' ? payload(errors || []) : payload;
       }
       return;
     }
   }
-
 }

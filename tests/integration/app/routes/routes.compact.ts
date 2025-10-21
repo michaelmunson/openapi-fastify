@@ -167,7 +167,8 @@ $.route("/users/:id/posts", {
                     userId: { type: "integer" },
                     title: { type: "string" },
                     content: { type: "string" }
-                  }
+                  },
+                  required: ['id', 'userId']
                 }
               }
             }
@@ -177,6 +178,8 @@ $.route("/users/:id/posts", {
     },
     async (request) => {
       const { id } = request.params;
+      // return {fish: 'horse'}
+      if (process.env.FAIL_TEST_4==='true') return {fish:"horse"} as any
       return dbHelpers.getPostsByUserId(Number(id));
     }
   )
@@ -229,9 +232,9 @@ $.route("/posts", {
             schema: {
               type: "object",
               properties: {
-                userId: { type: "integer" },
-                title: { type: "string" },
-                content: { type: "string" }
+                userId: { type: "integer", nullable: false },
+                title: { type: "string", nullable: false },
+                content: { type: "string", nullable: false }
               },
               required: ["userId", "title", "content"]
             }

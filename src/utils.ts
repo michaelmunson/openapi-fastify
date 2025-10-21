@@ -1,6 +1,5 @@
 import { FastifyReply, FastifyRequest } from "fastify";
-import { OpenAPI, FromSpec } from "./types";
-import { RouterOptions } from "./types/router.types";
+import { OpenAPI } from "./types";
 import Ajv from "ajv";
 
 export const OPERATOR_NAMES = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head'] as const;
@@ -102,7 +101,12 @@ export const validateResponse = <T extends OpenAPI.Operator>(specification: T, r
   };
 }
 
-
+export const isDebugMode = () => process.env.DEBUG === 'true';
+export const debugLog = (...args: any[]) => {
+  if (isDebugMode()) {
+    console.log('[openapi-fastify]',...args);
+  }
+}
 /* export const modifyHandler = <T extends OpenAPI.Operator>(specification: T, method: FromSpec.Method<T>, options:RouterOptions): FromSpec.Method<T> => {
   const {
     parseQueryParams:isParseQueryParams,
@@ -140,14 +144,14 @@ export const replacePathWithOpenApiParams = (path: string) => path.replace(/:([a
 
 export const AUTO_VALIDATION_DEFAULTS = {
   request: {
-    validate: true,
+    validate: false,
     errorResponse: {
       status: 400,
       payload: {error: "Invalid Request Body", errors: []}
     }
   },
   response: {
-    validate: true,
+    validate: false,
     errorResponse: {
       status: 500,
       payload: {error: "Invalid Response", errors: []}

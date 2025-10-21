@@ -1,3 +1,4 @@
+import {ErrorObject} from "ajv";
 import { FromSpec, OpenAPI } from ".";
 import { OPERATOR_NAMES } from "../utils";
 
@@ -8,38 +9,6 @@ export type RouterOptions = {
    * @returns The modified OpenAPI specification.
    */
   specModifier?: (spec: OpenAPI.Operator) => OpenAPI.Operator,
-  /**
-   * @description
-   * - Whether to parse query parameters.
-   * - If true, the query parameters will be parsed according to that query parameter's schema type.
-   * @default false
-   */
-  parseQueryParams?: boolean,
-  /**
-   * @deprecated Use `autoValidate.request` instead.
-   * @description
-   * - Whether to enforce the request body schema.
-   * - If true, the request body will be validated against the schema.
-   * @default false
-   */
-  enforceRequestBodySchema?: boolean,
-  /**
-   * @deprecated Use `autoValidate.response` instead.
-   * @description
-   * - Whether to enforce the response schema.
-   * - If true, the request will be validated against the schema.
-   * @default false
-   */
-  enforceResponseSchema?: boolean,
-  /**
-   * @description
-   * - Whether to parse the request body.
-   * - If true, the request body will be parsed according to that request body's schema type.
-   *   - This includes applying defaults to the request body.
-   * @default false
-   */
-  parseRequestBody?: boolean,
-
   /**
    * @description
    * - Whether to automatically validate the request body and response.
@@ -55,7 +24,7 @@ export type RouterOptions = {
       validate?: boolean,
       errorResponse?: {
         status: number,
-        payload: any
+        payload: Record<string,any> | ((errors:ErrorObject<any>[]) => Record<string,any>)
       }
     },
     /**
@@ -68,7 +37,7 @@ export type RouterOptions = {
       validate?: boolean,
       errorResponse?: {
         status: number,
-        payload: any
+        payload: Record<string,any> | ((errors:ErrorObject<any>[]) => Record<string,any>)
       }
     }
   }

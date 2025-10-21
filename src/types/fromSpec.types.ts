@@ -1,7 +1,6 @@
 import {OpenAPI} from ".";
 import { OperatorMethod } from "./fastify.types";
 import type { 
-  MutableRequired,
   ParametersToRecord,
   QueryParametersToRecord,
   RequestBodyToRecord,
