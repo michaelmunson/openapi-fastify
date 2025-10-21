@@ -1,6 +1,7 @@
 import {OpenAPI} from ".";
 import { OperatorMethod } from "./fastify.types";
 import type { 
+  MutableRequired,
   ParametersToRecord,
   QueryParametersToRecord,
   RequestBodyToRecord,
@@ -45,3 +46,4 @@ export type ComponentFromRef<Document, Ref extends string> =
         : never
       : never
     : never;
+

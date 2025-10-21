@@ -48,6 +48,41 @@ export class OpenApiRouter<T> {
 
   constructor(readonly app: FastifyInstance, readonly document: T, readonly options:RouterOptions={}) {}
 
+  /**
+   * @description
+   * Registers a new route with the specified path and HTTP methods.
+   * @param path - The path of the route.
+   * @param methods - The HTTP methods of the route.
+   * @returns The route object.
+   * @example
+   * ```typescript
+   * $.route("/users", {
+        post: $.op(
+          {
+            summary: "Create a new user",
+            requestBody: {
+              required: true,
+              content: {
+                "application/json": {
+                  schema: $.ref('#/components/schemas/User')
+                }
+              }
+            },
+            responses: {
+              201: $.ref('#/components/responses/UserCreated')
+            }
+          },
+          async (request, reply) => {
+            const { username, email, password, role } = request.body as any;
+            const user = dbHelpers.addUser({ username, email, password, role });
+            const { password: _, ...rest } = user;
+            reply.code(201);
+            return rest;
+          }
+        )
+      });
+  * ```
+   */
   route(path:string, methods:Router.OperatorRecord) {
     const route = {
       path,
@@ -57,14 +92,62 @@ export class OpenApiRouter<T> {
     return route;
   }
 
+  /**
+   * @description
+   * Creates an operation handler with OpenAPI specification and type-safe handler function.
+   * @param specification - The OpenAPI specification.
+   * @param handler - The handler function.
+   * @returns The operator object.
+   * @example
+  * ```typescript
+    $.op(
+      {
+        summary: "Create a new user",
+        requestBody: {
+          required: true,
+          content: {
+            "application/json": {
+              schema: $.ref('#/components/schemas/User')
+            }
+          }
+        },
+        responses: {
+          201: $.ref('#/components/responses/UserCreated')
+        }
+      },
+      async (request, reply) => {
+        const { username, email, password, role } = request.body as any;
+        const user = dbHelpers.addUser({ username, email, password, role });
+        const { password: _, ...rest } = user;
+        reply.code(201);
+        return rest;
+      }
+    )
+   * ```
+   */
   op<T extends OpenAPI.Operator>(specification: T, handler: FromSpec.Method<T>): Router.Operator<T> {
     return {
       specification,
-      handler: modifyHandler(specification, handler, this.options)
+      handler: modifyHandler(specification, handler, this.options) as FromSpec.Method<T>
     }
   }
 
-  ref<S extends FromSpec.Refs<T>>(ref: S, {useRef}: {useRef: boolean} = {useRef: false}): FromSpec.ComponentFromRef<T, S> {
+  /**
+   * @description
+   * Creates a reference to a schema in the OpenAPI document.
+   * @param ref - The reference string.
+   * @param options - The options for the reference.
+   * @returns The referenced schema object.
+   * @example
+  * ```typescript
+   * $.ref('#/components/schemas/User') // returns `{type: 'object', properties: {...}}`
+   * ```
+   * @example `with useRef: true`
+   * ```typescript
+   * $.ref('#/components/schemas/User', {useRef: true}) // returns `{$ref: '#/components/schemas/User'}`
+   * ```
+   */
+  ref<S extends FromSpec.Refs<T>>(ref: S, {useRef}: {useRef?: boolean} = {useRef: false}): FromSpec.ComponentFromRef<T, S> {
     const [,,schema] = (ref as string).replace('#/', '').split('/');
     const component = (this.document as any).components.schemas[schema];
     if (useRef) {
@@ -77,6 +160,44 @@ export class OpenApiRouter<T> {
     } as any
   }
 
+  /**
+   * @description
+   * - Helper function to create a new OpenAPI path operator specification.
+   * - Useful when you want to define a specification outside of the route registration.
+   * @param specification - The OpenAPI specification.
+   * @returns The new OpenAPI specification.
+   * @example
+   * ```typescript
+   * $.spec({
+   *   summary: "Create a new user",
+   *   requestBody: {
+   *     required: true,
+   *     content: {
+   *       "application/json": {
+   *         schema: $.ref('#/components/schemas/User')
+   *       }
+   *     }
+   *   }
+   * })
+   * ```
+   */
+  spec<T extends OpenAPI.Operator>(specification: T){
+    return {...specification} as const;
+  }
+
+  handler<T extends OpenAPI.Operator>(handler: FromSpec.Method<T>){
+    return handler;
+  }
+
+  /**
+   * @description
+   * - Initializes the router and registers all routes with Fastify.
+   * @returns The Fastify instance.
+   * @example
+   * ```typescript
+   * $.initialize();
+   * ```
+   */
   initialize() {
     for (const {path, methods} of this.routes) {
       for (const [_method, {specification:originalSpec, handler}] of Object.entries(methods) as [Router.OperatorName, Router.Operator<OpenAPI.Operator>][]) {
@@ -90,6 +211,17 @@ export class OpenApiRouter<T> {
     return this.app;
   }
 
+  /**
+   * @description
+   * - Returns the OpenAPI specification.
+   * - This method should be called after all routes have been registered.
+   * @returns The OpenAPI specification.
+   * @example
+   * ```typescript
+   * const spec = $.specification;
+   * console.log(spec.paths['/users']);
+   * ```
+   */
   get specification() {
     const newSpec = {...this.document} as any;
     if (!newSpec.paths) newSpec.paths = {};
@@ -102,6 +234,6 @@ export class OpenApiRouter<T> {
         newSpec.paths[path][method] = specification;
       }
     }
-    return newSpec;
+    return newSpec as OpenAPI.Document;
   }
 }

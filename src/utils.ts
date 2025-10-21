@@ -86,7 +86,7 @@ const parseRequestBody = <T extends OpenAPI.Operator>(specification: T, request:
 }
 
 
-export const modifyHandler = <T extends OpenAPI.Operator>(specification: T, method: FromSpec.Method<T>, options:RouterOptions) => {
+export const modifyHandler = <T extends OpenAPI.Operator>(specification: T, method: FromSpec.Method<T>, options:RouterOptions): FromSpec.Method<T> => {
   const {
     parseQueryParams:isParseQueryParams,
     enforceRequestBodySchema:isEnforceRequestBodySchema,
@@ -96,7 +96,7 @@ export const modifyHandler = <T extends OpenAPI.Operator>(specification: T, meth
   if (!isParseQueryParams && !isEnforceRequestBodySchema && !isParseRequestBody)
     return method;
   
-  return async (...params: Parameters<FromSpec.Method<T>>) => {
+  return async (...params: Parameters<FromSpec.Method<T>>): Promise<FromSpec.Response<T>> => {
     const [request, reply] = params;
     if (isParseQueryParams) {
       const newQuery = parseQueryParams(specification, request as FastifyRequest);
@@ -106,7 +106,7 @@ export const modifyHandler = <T extends OpenAPI.Operator>(specification: T, meth
       const {isValid, errors} = validateRequestBody(specification, request as FastifyRequest);
       if (!isValid) {
         reply.status(400);
-        return {error: "Invalid request body", errors};
+        return {error: "Invalid request body", errors} as FromSpec.Response<T>;
       }
     }
     if (isParseRequestBody) {

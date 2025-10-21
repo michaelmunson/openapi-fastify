@@ -1,5 +1,5 @@
 
-export const db = {
+export const db = <const>{
   users: [
     {
       id: 1,
@@ -32,18 +32,23 @@ export const db = {
   ]
 };
 
+export type User = (typeof db.users)[number];
+export type Post = (typeof db.posts)[number];
+
 export const dbHelpers = {
   getUserById: (id: number) => db.users.find(u => u.id === id),
   getUserByUsername: (username: string) => db.users.find(u => u.username === username),
   getPostsByUserId: (userId: number) => db.posts.filter(p => p.userId === userId),
-  addUser: (user: any) => {
-    user.id = db.users.length + 1;
-    db.users.push(user);
-    return user;
+  addUser: (user: Omit<User, 'id'>) => {
+    return {
+      ...user,
+      id: db.users.length + 1
+    };
   },
   addPost: (post: any) => {
-    post.id = db.posts.length + 1;
-    db.posts.push(post);
-    return post;
+    return {
+      ...post,
+      id: db.posts.length + 1
+    };
   }
 };

@@ -76,11 +76,6 @@ $.route("/users", {
       
       let users = db.users;
 
-      // Filter by role if provided
-      if (role) {
-        users = users.filter(u => u.role === role);
-      }
-
       // Remove password from output
       let result = users.map(({ password, ...u }) => u);
 
@@ -190,7 +185,7 @@ $.route("/users/:id/posts", {
 // POST /users - create a new user
 $.route("/users", {
   post: $.op(
-    {
+    <const>{
       summary: "Create a new user",
       requestBody: {
         required: true,
@@ -199,33 +194,17 @@ $.route("/users", {
             schema: {
               type: "object",
               properties: {
-                username: { type: "string" },
-                email: { type: "string" },
-                password: { type: "string" },
-                role: { type: "string", default: "user" }
+                userId: { type: "integer" },
+                title: { type: "string" },
+                content: { type: "string" }
               },
-              required: ["username", "email", "password"]
+              required: ["userId", "title", "content"]
             }
           }
         }
       },
       responses: {
-        201: {
-          description: "User created",
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                properties: {
-                  id: { type: "integer" },
-                  username: { type: "string" },
-                  email: { type: "string" },
-                  role: { type: "string" }
-                }
-              }
-            }
-          }
-        }
+        201: $.ref('#/components/responses/UserCreated')
       }
     },
     async (request, reply) => {

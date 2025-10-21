@@ -10,11 +10,12 @@ const specification = <const>{
       User: {
         type: 'object',
         properties: {
-          id: { type: 'number' },
-          username: { type: 'string' },
-          email: { type: 'string' },
-          role: { type: 'string' }
-        }
+          id: { type: 'number', nullable: false },
+          username: { type: 'string', nullable: false },
+          email: { type: 'string', nullable: false },
+          role: { type: 'string', nullable: false }
+        },
+        required: ['id', 'username', 'email', 'role']
       }
     },
     responses: {
@@ -26,6 +27,22 @@ const specification = <const>{
               type: 'object',
               properties: {
                 error: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      UserCreated: {
+        description: 'User Created',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                id: { type: 'number' },
+                username: { type: 'string' },
+                email: { type: 'string' },
+                role: { type: 'string' }
               }
             }
           }

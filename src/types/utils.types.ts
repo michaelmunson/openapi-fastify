@@ -12,15 +12,15 @@ export type StringTypeToType<T> =
   : any;
 
 export type ParametersToRecord<T extends OpenAPI.Parameter[]> = {
-  [K in T[number] as K extends { in: 'path' } ? K['name'] : never]: K extends { schema: { type: infer Type } } 
-    ? StringTypeToType<Type>
-    : string  
+  [K in T[number]as K extends { in: 'path' } ? K['name'] : never]: K extends { schema: { type: infer Type } }
+  ? StringTypeToType<Type>
+  : string
 }
 
 export type QueryParametersToRecord<T extends OpenAPI.Parameter[]> = {
-  [K in T[number] as K extends { in: 'query' } ? K['name'] : never]: K extends { schema: { type: infer Type } } 
-    ? StringTypeToType<Type>
-    : any
+  [K in T[number]as K extends { in: 'query' } ? K['name'] : never]: K extends { schema: { type: infer Type } }
+  ? StringTypeToType<Type>
+  : any
 }
 
 export type SchemaToType<Schema> =
@@ -46,39 +46,39 @@ export type SchemaToType<Schema> =
 
   : Schema extends { type: 'object'; properties: infer Props }
   ? {
-      [K in keyof Props as K extends RequiredKey<Schema, K> ? K : never]: SchemaToType<Props[K]>
-    } & {
-      [K in keyof Props as K extends RequiredKey<Schema, K> ? never : K]?: SchemaToType<Props[K]>
-    } & (Schema extends { additionalProperties: infer Additional }
-      ? Additional extends false
-        ? {}
-        : Additional extends { type: any }
-        ? { [key: string]: SchemaToType<Additional> }
-        : { [key: string]: any }
-      : {})
+    [K in keyof Props as K extends RequiredKey<Schema, K> ? K : never]: SchemaToType<Props[K]>
+  } & {
+    [K in keyof Props as K extends RequiredKey<Schema, K> ? never : K]?: SchemaToType<Props[K]>
+  } & (Schema extends { additionalProperties: infer Additional }
+    ? Additional extends false
+    ? {}
+    : Additional extends { type: any }
+    ? { [key: string]: SchemaToType<Additional> }
+    : { [key: string]: any }
+    : {})
 
   : Schema extends { type: 'object'; additionalProperties: infer Additional }
   ? Additional extends false
-    ? Record<string, never>
-    : Additional extends { type: any }
-    ? Record<string, SchemaToType<Additional>>
-    : Record<string, any>
+  ? Record<string, never>
+  : Additional extends { type: any }
+  ? Record<string, SchemaToType<Additional>>
+  : Record<string, any>
 
   : Schema extends { type: infer Type; format?: infer Format }
   ? Type extends 'string'
-    ? Format extends 'date' | 'date-time' | 'time'
-      ? string
-      : Format extends 'binary' | 'byte'
-      ? string | Blob
-      : string
-    : StringTypeToType<Type>
+  ? Format extends 'date' | 'date-time' | 'time'
+  ? string
+  : Format extends 'binary' | 'byte'
+  ? string | Blob
+  : string
+  : StringTypeToType<Type>
 
   : Schema extends { type: infer Type }
   ? StringTypeToType<Type>
 
   : any;
 
-  type SchemaToOneOf<T extends any[]> = T[number] extends infer Each
+type SchemaToOneOf<T extends any[]> = T[number] extends infer Each
   ? SchemaToType<Each>
   : never;
 
@@ -134,45 +134,32 @@ export type RequestBodyToRecord<T extends OpenAPI.RequestBody> = BodyToRecord<T>
 
 export type ResponseToRecord<T> =
   T extends { responses: infer Responses }
-    ? {
-        [K in keyof Responses]:
-          Responses[K] extends {
-            content: {
-              'application/json': {
-                schema: infer Schema
-              }
-            }
-          }
-            ? SchemaToType<Schema>
-            : never
-      }[keyof Responses]
-    : never;
+  ? {
+    [K in keyof Responses]:
+    Responses[K] extends {
+      content: {
+        'application/json': {
+          schema: infer Schema
+        }
+      }
+    }
+    ? SchemaToType<Schema>
+    : never
+  }[keyof Responses]
+  : never;
 
-// export type ResponseToRecord<T> = 
-//   T extends {
-//     responses: {
-//       200: {
-//         content: {
-//           'application/json': {
-//             schema: infer Schema
-//           }
-//         }
-//       }
-//     }
-//   } 
-//   ? SchemaToType<Schema>
-//   : T extends {
-//     responses: {
-//       201: {
-//         content: {
-//           'application/json': {
-//             schema: infer Schema
-//           }
-//         }
-//       }
-//     }
-//   }
-//   ? SchemaToType<Schema>
-//   : any;
 
 export type SchemaToRecord<Schema> = SchemaToType<Schema>;
+
+
+export type MutableRequired<T> = T extends object
+  ? T extends { required?: readonly string[] }
+  ? Omit<T, 'required'> & { required?: string[] }
+  : T
+  : T;
+
+export type ReadonlyRequired<T> = T extends object
+  ? T extends { required?: string[] }
+  ? Omit<T, 'required'> & { readonly required?: readonly string[] }
+  : T
+  : T;
