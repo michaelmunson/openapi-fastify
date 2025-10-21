@@ -1,4 +1,4 @@
-import { OpenApiPathOperator } from "./openapi.types";
+import { Operator } from "./openapi.types";
 
 export type RouterOptions = {
   /**
@@ -6,7 +6,7 @@ export type RouterOptions = {
    * @param spec - The OpenAPI specification.
    * @returns The modified OpenAPI specification.
    */
-  specModifier?: (spec: OpenApiPathOperator) => OpenApiPathOperator,
+  specModifier?: (spec: Operator) => Operator,
   /**
    * @description
    * - Whether to parse query parameters.

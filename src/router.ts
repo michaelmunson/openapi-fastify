@@ -1,5 +1,7 @@
 import { FastifyInstance } from "fastify";
-import { MethodFromSpec, MethodRecord, OpenApiPathOperator, Operator, OperatorName, RefStrings, RefStringToComponentRecord, RefStringToRecord } from "./types";
+import { MethodFromSpec, MethodRecord, Operator, OperatorName, RefStrings } from "./types";
+import {RefStringToComponentRecord, RefStringToRecord} from "./types/operator.types";
+import {OpenAPI} from ".";
 import { RouterOptions } from "./types/router.types";
 import { modifyHandler, replacePathWithOpenApiParams } from "./utils";
 
@@ -57,7 +59,7 @@ export class OpenApiRouter<T> {
     return route;
   }
 
-  op<T extends OpenApiPathOperator>(specification: T, handler: MethodFromSpec<T>): Operator<T> {
+  op<T extends OpenAPI.Operator>(specification: T, handler: MethodFromSpec<T>): Operator<T> {
     return {
       specification,
       handler: modifyHandler(specification, handler, this.options)

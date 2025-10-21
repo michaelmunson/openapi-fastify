@@ -16,6 +16,34 @@ const specification = <const>{
           role: { type: 'string' }
         }
       }
+    },
+    responses: {
+      NotFound: {
+        description: 'User not found',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                error: { type: 'string' }
+              }
+            }
+          }
+        }
+      },
+      '201': {
+        description: 'User created',
+        content: {
+          'application/json': {
+            schema: {
+              type: 'object',
+              properties: {
+                id: { type: 'string' }
+              }
+            }
+          }
+        }
+      }
     }
   }
 };

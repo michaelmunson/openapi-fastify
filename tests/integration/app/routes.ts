@@ -61,7 +61,8 @@ $.route("/users", {
               }
             }
           }
-        }
+        },
+        404: $.ref('#/components/responses/NotFound')
       }
     },
     async (request, reply) => {

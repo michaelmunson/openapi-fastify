@@ -1,16 +1,5 @@
-import { OpenAPIV3 } from "openapi-types";
-import { OperatorName } from "./types";
+import * as OpenAPI from "./openapi.types";
 
-export type {OpenAPIV3}
-export type OpenApiDocument = OpenAPIV3.Document;
-export type OpenApiGet = OpenAPIV3.HttpMethods;
-export type OpenApiPathItem = OpenAPIV3.PathItemObject;
-export type OpenApiPathBase = Omit<OpenApiPathItem, OperatorName>;
-export type OpenApiPathOperator = OpenAPIV3.OperationObject;
-export type OpenApiParameter = OpenAPIV3.ParameterObject;
-export type OpenApiRequestBody = OpenAPIV3.RequestBodyObject;
-export type OpenApiComponents = OpenAPIV3.ComponentsObject;
-export type OpenApiSchema = OpenAPIV3.SchemaObject;
 
 export type StringTypeToType<T> =
   T extends 'string' ? string
@@ -22,13 +11,13 @@ export type StringTypeToType<T> =
   : T extends 'object' ? Record<string, any>
   : any;
 
-export type ParametersToRecord<T extends OpenApiParameter[]> = {
+export type ParametersToRecord<T extends OpenAPI.Parameter[]> = {
   [K in T[number] as K extends { in: 'path' } ? K['name'] : never]: K extends { schema: { type: infer Type } } 
     ? StringTypeToType<Type>
     : string  
 }
 
-export type QueryParametersToRecord<T extends OpenApiParameter[]> = {
+export type QueryParametersToRecord<T extends OpenAPI.Parameter[]> = {
   [K in T[number] as K extends { in: 'query' } ? K['name'] : never]: K extends { schema: { type: infer Type } } 
     ? StringTypeToType<Type>
     : any
@@ -37,6 +26,14 @@ export type QueryParametersToRecord<T extends OpenApiParameter[]> = {
 export type SchemaToType<Schema> =
   Schema extends { $ref: string }
   ? any
+  : Schema extends { oneOf: infer OneOf extends any[] }
+  ? SchemaToOneOf<OneOf>
+
+  : Schema extends { anyOf: infer AnyOf extends any[] }
+  ? SchemaToAnyOf<AnyOf>
+
+  : Schema extends { allOf: infer AllOf extends any[] }
+  ? SchemaToAllOf<AllOf>
 
   : Schema extends { enum: infer EnumValues extends readonly any[] }
   ? EnumValues[number]
@@ -49,35 +46,49 @@ export type SchemaToType<Schema> =
 
   : Schema extends { type: 'object'; properties: infer Props }
   ? {
-    [K in keyof Props as K extends RequiredKey<Schema, K> ? K : never]: SchemaToType<Props[K]>
-  } & {
-    [K in keyof Props as K extends RequiredKey<Schema, K> ? never : K]?: SchemaToType<Props[K]>
-  } & (Schema extends { additionalProperties: infer Additional }
-    ? Additional extends false
-    ? {}
-    : Additional extends { type: any }
-    ? { [key: string]: SchemaToType<Additional> }
-    : { [key: string]: any }
-    : {})
+      [K in keyof Props as K extends RequiredKey<Schema, K> ? K : never]: SchemaToType<Props[K]>
+    } & {
+      [K in keyof Props as K extends RequiredKey<Schema, K> ? never : K]?: SchemaToType<Props[K]>
+    } & (Schema extends { additionalProperties: infer Additional }
+      ? Additional extends false
+        ? {}
+        : Additional extends { type: any }
+        ? { [key: string]: SchemaToType<Additional> }
+        : { [key: string]: any }
+      : {})
 
   : Schema extends { type: 'object'; additionalProperties: infer Additional }
   ? Additional extends false
-  ? Record<string, never>
-  : Additional extends { type: any }
-  ? Record<string, SchemaToType<Additional>>
-  : Record<string, any>
+    ? Record<string, never>
+    : Additional extends { type: any }
+    ? Record<string, SchemaToType<Additional>>
+    : Record<string, any>
 
   : Schema extends { type: infer Type; format?: infer Format }
   ? Type extends 'string'
-  ? Format extends 'date' | 'date-time' | 'time'
-  ? string 
-  : Format extends 'binary' | 'byte'
-  ? string | Blob
-  : string
-  : StringTypeToType<Type>
+    ? Format extends 'date' | 'date-time' | 'time'
+      ? string
+      : Format extends 'binary' | 'byte'
+      ? string | Blob
+      : string
+    : StringTypeToType<Type>
+
   : Schema extends { type: infer Type }
   ? StringTypeToType<Type>
+
   : any;
+
+  type SchemaToOneOf<T extends any[]> = T[number] extends infer Each
+  ? SchemaToType<Each>
+  : never;
+
+type SchemaToAnyOf<T extends any[]> = T[number] extends infer Each
+  ? SchemaToType<Each>
+  : never;
+
+type SchemaToAllOf<T extends any[]> =
+  UnionToIntersection<SchemaToType<T[number]>>;
+
 
 type RequiredKey<Schema, K> =
   Schema extends { required: infer Req extends readonly any[] }
@@ -91,7 +102,7 @@ type UnionToIntersection<U> =
   ? I
   : never;
 
-export type BodyToRecord<T extends OpenApiRequestBody> =
+export type BodyToRecord<T extends OpenAPI.RequestBody> =
   T extends {
     content: {
       'application/json': {
@@ -118,123 +129,54 @@ export type BodyToRecord<T extends OpenApiRequestBody> =
   ? SchemaToType<Schema>
   : any;
 
+export type RequestBodyToRecord<T extends OpenAPI.RequestBody> = BodyToRecord<T>;
 
-export type SchemaToRecord<Schema> = SchemaToType<Schema>;
-
-// Example of a fairly complex JSON Schema type
-export const ExampleComplexSchema = {
-  type: "object",
-  required: ["user", "items", "status"],
-  properties: {
-    user: {
-      type: "object",
-      required: ["id", "profile"],
-      properties: {
-        id: { type: "string" },
-        profile: {
-          type: "object",
-          required: ["name", "email", "roles"],
-          properties: {
-            name: { type: "string" },
-            email: {
-              type: "string",
-              format: "email"
-            },
-            roles: {
-              type: "array",
-              items: {
-                type: "string",
-                enum: ["admin", "editor", "viewer"]
-              },
-              minItems: 1
-            },
-            address: {
-              type: "object",
-              properties: {
-                street: { type: "string" },
-                city: { type: "string" },
-                coordinates: {
-                  type: "object",
-                  required: ["lat", "lng"],
-                  properties: {
-                    lat: { type: "number" },
-                    lng: { type: "number" }
-                  }
-                }
-              }
-            }
-          }
-        },
-        createdAt: {
-          type: "string",
-          format: "date-time"
-        }
-      }
-    },
-    items: {
-      type: "array",
-      items: {
-        type: "object",
-        required: ["type", "quantity"],
-        properties: {
-          type: {
-            type: "string",
-            enum: ["book", "toy", "tool"]
-          },
-          quantity: {
-            type: "integer",
-            minimum: 1
-          },
-          meta: {
-            oneOf: [
-              {
-                type: "object",
-                properties: {
-                  author: { type: "string" },
-                  genre: { type: "string" }
-                },
-                required: ["author"]
-              },
-              {
-                type: "object",
-                properties: {
-                  manufacturer: { type: "string" },
-                  warranty: { type: "boolean" }
-                }
-              }
-            ]
+export type ResponseToRecord<T> = 
+  T extends {
+    responses: {
+      200: {
+        content: {
+          'application/json': {
+            schema: infer Schema
           }
         }
       }
-    },
-    status: {
-      type: "string",
-      enum: ["active", "archived", "pending"]
-    },
-    tags: {
-      type: "array",
-      items: {
-        type: "string"
-      }
-    },
-    config: {
-      type: "object",
-      properties: {
-        enabled: { type: "boolean", default: true },
-        thresholds: {
-          type: "array",
-          items: {
-            type: "object",
-            properties: {
-              level: { type: "string", enum: ["low", "medium", "high"] },
-              value: { type: "number" }
-            },
-            required: ["level", "value"]
+    }
+  } 
+  ? SchemaToType<Schema>
+  : T extends {
+    responses: {
+      201: {
+        content: {
+          'application/json': {
+            schema: infer Schema
           }
         }
       }
     }
   }
-} as const;
+  ? SchemaToType<Schema>
+  : any;
 
-export type ExampleComplexSchemaType = SchemaToType<typeof ExampleComplexSchema>;
+export type SchemaToRecord<Schema> = SchemaToType<Schema>;
+
+export type RefStringToRecord<Document, Ref> = 
+  Ref extends `#/components/schemas/${infer SchemaName}`
+    ? Document extends { components: { schemas: infer Schemas } }
+      ? SchemaName extends keyof Schemas
+        ? Schemas[SchemaName]
+        : never
+      : never
+    : never;
+
+
+export type RefStringToComponentRecord<Document, Ref extends string> =
+  Ref extends `#/components/${infer Section}/${infer Name}`
+    ? Document extends { components: Record<string, any> }
+      ? Section extends keyof Document['components']
+        ? Name extends keyof Document['components'][Section]
+          ? Document['components'][Section][Name]
+          : never
+        : never
+      : never
+    : never;
