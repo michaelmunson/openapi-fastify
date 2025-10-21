@@ -23,6 +23,13 @@ export type RouterOptions = {
   enforceRequestBodySchema?: boolean,
   /**
    * @description
+   * - Whether to enforce the response schema.
+   * - If true, the request will be validated against the schema.
+   * @default false
+   */
+  enforceResponseSchema?: boolean,
+  /**
+   * @description
    * - Whether to parse the request body.
    * - If true, the request body will be parsed according to that request body's schema type.
    *   - This includes applying defaults to the request body.
