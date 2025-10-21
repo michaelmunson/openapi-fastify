@@ -27,7 +27,7 @@ function deploy() {
 }
 
 main(){
-  deploy
+  npm run create:docs && deploy
 }
 
 main

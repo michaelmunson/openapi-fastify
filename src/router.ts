@@ -27,7 +27,7 @@ import Ajv from "ajv";
  * 
  * router.route("/hello", {
  *   get: router.op(
- *     {
+ *     <const>{
  *       operationId: "getHello",
  *       responses: { 200: { description: "Hello response" } }
  *     },
@@ -59,7 +59,7 @@ export class OpenApiRouter<T> {
    * ```typescript
    * $.route("/users", {
         post: $.op(
-          {
+          <const>{
             summary: "Create a new user",
             requestBody: {
               required: true,
@@ -102,7 +102,7 @@ export class OpenApiRouter<T> {
    * @example
   * ```typescript
     $.op(
-      {
+      <const>{
         summary: "Create a new user",
         requestBody: {
           required: true,
@@ -169,7 +169,7 @@ export class OpenApiRouter<T> {
    * @returns The new OpenAPI specification.
    * @example
    * ```typescript
-   * $.spec({
+   * $.spec(<const>{
    *   summary: "Create a new user",
    *   requestBody: {
    *     required: true,
@@ -312,11 +312,11 @@ export class OpenApiRouter<T> {
       const method = request.method.toLowerCase();
       const route = replacePathWithOpenApiParams(request.routeOptions.url ?? '');
       if (!payload) return
-      console.log('Route', route);
+      debugLog('Route', route);
       const status = reply.statusCode;
-      console.log('Status', status)
+      debugLog('Status', status)
       const paths = this.specification.paths;
-      console.log('Paths', Object.keys(paths), (paths as any)[route][method])
+      debugLog('Paths', Object.keys(paths), (paths as any)[route][method])
       const resBodyContent = (paths as any)?.[route]?.[method]?.['responses']?.[status.toString()]?.['content'] ?? {};
       const resBodySpec = (Object.values(resBodyContent)[0] as { schema?: any })?.schema;
       debugLog('Response Body Spec', JSON.stringify(resBodySpec));

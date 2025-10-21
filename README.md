@@ -2,6 +2,8 @@
 
 A powerful TypeScript library that seamlessly integrates OpenAPI specifications with Fastify routing, providing type-safe API development with automatic validation and comprehensive documentation generation.
 
+## [Full Documentation Here](https://michaelmunson.github.io/openapi-fastify/)
+
 ## Features
 
 - **Type-Safe Routing**: Full TypeScript support with compile-time type checking
@@ -27,7 +29,7 @@ import Fastify from 'fastify';
 import { OpenApiRouter } from 'openapi-fastify';
 
 // Create your OpenAPI specification
-const openApiDoc = {
+const openApiDoc = <const>{
   openapi: "3.0.0",
   info: {
     title: "My API",
@@ -50,7 +52,16 @@ const openApiDoc = {
 
 // Initialize Fastify and router
 const app = Fastify();
-const router = new OpenApiRouter(app, openApiDoc);
+const router = new OpenApiRouter(app, openApiDoc, {
+  autoValidate: {
+    request: {
+      validate: true
+    },
+    response: {
+      validate: true
+    }
+  }
+});
 ```
 
 ### 2. Define Routes
@@ -59,7 +70,7 @@ const router = new OpenApiRouter(app, openApiDoc);
 // Simple GET route
 router.route("/hello", {
   get: router.op(
-    {
+    <const>{
       summary: "Say Hello",
       responses: {
         200: {
@@ -86,7 +97,7 @@ router.route("/hello", {
 // POST route with request body validation
 router.route("/users", {
   post: router.op(
-    {
+    <const>{
       summary: "Create a new user",
       requestBody: {
         required: true,
