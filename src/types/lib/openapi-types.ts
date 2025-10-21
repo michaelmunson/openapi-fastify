@@ -87,7 +87,7 @@ export namespace OpenAPIV3_1 {
   export type ServerVariableObject = Modify<
     OpenAPIV3.ServerVariableObject,
     {
-      enum?: [string, ...string[]];
+      enum?: readonly string[];
     }
   >;
 
@@ -312,7 +312,7 @@ export namespace OpenAPIV3 {
   }
 
   export interface ServerVariableObject {
-    enum?: string[] | number[];
+    enum?: readonly string[] | readonly number[];
     default: string | number;
     description?: string;
   }
@@ -425,7 +425,7 @@ export namespace OpenAPIV3 {
     maxProperties?: number;
     minProperties?: number;
     required?: readonly string[];
-    enum?: any[];
+    enum?: readonly string[] | readonly number[];
     properties?: {
       [name: string]: ReferenceObject | SchemaObject;
     };

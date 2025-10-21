@@ -42,7 +42,10 @@ const specification = <const>{
                 id: { type: 'number' },
                 username: { type: 'string' },
                 email: { type: 'string' },
-                role: { type: 'string' }
+                roles: { type: 'array', items: {
+                  type: 'string',
+                  enum: ['admin', 'user'],
+                } }
               }
             }
           }
