@@ -137,3 +137,20 @@ export const validateResponse = <T extends OpenAPI.Operator>(specification: T, r
  */
 
 export const replacePathWithOpenApiParams = (path: string) => path.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, "{$1}");
+
+export const AUTO_VALIDATION_DEFAULTS = {
+  request: {
+    validate: true,
+    errorResponse: {
+      status: 400,
+      payload: {error: "Invalid Request Body", errors: []}
+    }
+  },
+  response: {
+    validate: true,
+    errorResponse: {
+      status: 500,
+      payload: {error: "Invalid Response", errors: []}
+    }
+  }
+}

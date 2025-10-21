@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {OpenAPI, FromSpec, Router} from ".";
 import { RouterOptions } from "./types/router.types";
-import { replacePathWithOpenApiParams, validateRequestBody, validateResponse } from "./utils";
+import { AUTO_VALIDATION_DEFAULTS, replacePathWithOpenApiParams, validateRequestBody, validateResponse } from "./utils";
 
 /**
  * OpenApiRouter is a class that integrates OpenAPI specifications with Fastify routing.
@@ -241,6 +241,15 @@ export class OpenApiRouter<T> {
         }, handler);
       }
     }
+    if (this.options.autoValidate){
+      const {request, response} = this.options.autoValidate;
+      if (request) {
+        this.app.addHook('preValidation', this.hooks.preValidation);
+      }
+      if (response) {
+        this.app.addHook('preSerialization', this.hooks.preSerialization);
+      }
+    }
     return this.app;
   }
 
@@ -282,7 +291,9 @@ export class OpenApiRouter<T> {
       if (!reqBodySpec) return;
       const {isValid, errors} = validateRequestBody(reqBodySpec, request);
       if (!isValid) {
-        reply.status(400).send({error: "Invalid request body", errors});
+        const status = this.options?.autoValidate?.request?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.request.errorResponse.status;
+        const payload = this.options?.autoValidate?.request?.errorResponse?.payload || {...AUTO_VALIDATION_DEFAULTS.request.errorResponse.payload, errors};
+        reply.status(status).send(payload);
       }
       return;
     },
@@ -296,7 +307,9 @@ export class OpenApiRouter<T> {
       if (!resBodySpec) return;
       const {isValid, errors} = validateResponse(resBodySpec, reply, payload);
       if (!isValid) {
-        reply.status(500).send({error: "Invalid response body", errors});
+        const status = this.options?.autoValidate?.response?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.response.errorResponse.status;
+        const payload = this.options?.autoValidate?.response?.errorResponse?.payload || {...AUTO_VALIDATION_DEFAULTS.response.errorResponse.payload, errors};
+        reply.status(status).send(payload);
       }
       return;
     }

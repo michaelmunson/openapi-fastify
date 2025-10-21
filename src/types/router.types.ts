@@ -16,6 +16,7 @@ export type RouterOptions = {
    */
   parseQueryParams?: boolean,
   /**
+   * @deprecated Use `autoValidate.request` instead.
    * @description
    * - Whether to enforce the request body schema.
    * - If true, the request body will be validated against the schema.
@@ -23,6 +24,7 @@ export type RouterOptions = {
    */
   enforceRequestBodySchema?: boolean,
   /**
+   * @deprecated Use `autoValidate.response` instead.
    * @description
    * - Whether to enforce the response schema.
    * - If true, the request will be validated against the schema.
@@ -37,6 +39,39 @@ export type RouterOptions = {
    * @default false
    */
   parseRequestBody?: boolean,
+
+  /**
+   * @description
+   * - Whether to automatically validate the request body and response.
+   */
+  autoValidate?: {
+    /**
+     * @description
+     * - Whether to automatically validate the request body.
+     * - If true, the request body will be validated against the schema via the preValidation hook.
+     * @default `{validate: true, errorResponse: {status: 400, payload: {error: "Invalid Request Body", errors: Ajv.Errors[]}}}`
+     */
+    request?: {
+      validate?: boolean,
+      errorResponse?: {
+        status: number,
+        payload: any
+      }
+    },
+    /**
+     * @description
+     * - Whether to automatically validate the response.
+     * - If true, the response will be validated against the schema via the preSerialization hook.
+     * @default `{validate: true, errorResponse: {status: 500, payload: {error: "Invalid Response", errors: Ajv.Errors[]}}}`
+     */
+    response?: {
+      validate?: boolean,
+      errorResponse?: {
+        status: number,
+        payload: any
+      }
+    }
+  }
 }
 
 export type OperatorName = typeof OPERATOR_NAMES[number];
