@@ -1,11 +1,11 @@
-import { FastifyRequest } from "fastify";
+import { FastifyReply, FastifyRequest } from "fastify";
 import { OpenAPI, FromSpec } from "./types";
 import { RouterOptions } from "./types/router.types";
 import Ajv from "ajv";
 
 export const OPERATOR_NAMES = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head'] as const;
 
-const parseQueryParams = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
+export const parseQueryParams = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
   const {parameters} = specification as {parameters:OpenAPI.Parameter[] | undefined};
   const {query} = request as {query:Record<string,string>};
   if (!parameters) return query;
@@ -32,23 +32,8 @@ const parseQueryParams = <T extends OpenAPI.Operator>(specification: T, request:
   return queryParams;
 }
 
-const validateRequestBody = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
-  const ajv = new Ajv();
-  const {requestBody} = specification as {requestBody:OpenAPI.RequestBody | undefined};
-  if (!requestBody) return {isValid:true};
-  const {content, required} = requestBody;
-  if (!content && !required) return {isValid:true};
-  if (!content) return {isValid:false};
-  const {schema} = content['application/json'] as {schema:OpenAPI.Schema};
-  const validate = ajv.compile(schema);
-  const isValid = validate(request.body);
-  return {
-    isValid,
-    errors:validate.errors,
-  };
-}
 
-const parseRequestBody = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
+export const parseRequestBody = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
   const { requestBody } = specification as { requestBody: OpenAPI.RequestBody | undefined };
   if (!requestBody) return request.body;
   const { content } = requestBody;
@@ -86,7 +71,39 @@ const parseRequestBody = <T extends OpenAPI.Operator>(specification: T, request:
 }
 
 
-export const modifyHandler = <T extends OpenAPI.Operator>(specification: T, method: FromSpec.Method<T>, options:RouterOptions): FromSpec.Method<T> => {
+export const validateRequestBody = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
+  const ajv = new Ajv();
+  const {requestBody} = specification as {requestBody:OpenAPI.RequestBody | undefined};
+  if (!requestBody) return {isValid:true};
+  const {content, required} = requestBody;
+  if (!content && !required) return {isValid:true};
+  if (!content) return {isValid:false};
+  const {schema} = content['application/json'] as {schema:OpenAPI.Schema};
+  const validate = ajv.compile(schema);
+  const isValid = validate(request.body);
+  return {
+    isValid,
+    errors:validate.errors,
+  };
+}
+
+export const validateResponse = <T extends OpenAPI.Operator>(specification: T, response: FastifyReply, payload:any) => {
+  const ajv = new Ajv();
+  const {responses} = specification as unknown as {responses:OpenAPI.Response | undefined};
+  if (!responses) return {isValid:true};
+  const [, responseSchemaContent] = Object.entries(responses).find(([code, responseSchema]) => code === response.status.toString()) ?? [];
+  const schema = responseSchemaContent?.content?.['application/json']?.schema as OpenAPI.Schema | undefined;
+  if (!schema) return {isValid:true};
+  const validate = ajv.compile(schema);
+  const isValid = validate(payload);
+  return {
+    isValid,
+    errors:validate.errors,
+  };
+}
+
+
+/* export const modifyHandler = <T extends OpenAPI.Operator>(specification: T, method: FromSpec.Method<T>, options:RouterOptions): FromSpec.Method<T> => {
   const {
     parseQueryParams:isParseQueryParams,
     enforceRequestBodySchema:isEnforceRequestBodySchema,
@@ -117,5 +134,6 @@ export const modifyHandler = <T extends OpenAPI.Operator>(specification: T, meth
     return await method(request, reply);
   }
 }
+ */
 
 export const replacePathWithOpenApiParams = (path: string) => path.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, "{$1}");

@@ -1,7 +1,7 @@
-import { FastifyInstance } from "fastify";
+import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import {OpenAPI, FromSpec, Router} from ".";
 import { RouterOptions } from "./types/router.types";
-import { modifyHandler, replacePathWithOpenApiParams } from "./utils";
+import { replacePathWithOpenApiParams, validateRequestBody, validateResponse } from "./utils";
 
 /**
  * OpenApiRouter is a class that integrates OpenAPI specifications with Fastify routing.
@@ -128,7 +128,7 @@ export class OpenApiRouter<T> {
   op<T extends OpenAPI.Operator>(specification: T, handler: FromSpec.Method<T>): Router.Operator<T> {
     return {
       specification,
-      handler: modifyHandler(specification, handler, this.options) as FromSpec.Method<T>
+      handler
     }
   }
 
@@ -185,6 +185,39 @@ export class OpenApiRouter<T> {
     return {...specification} as const;
   }
 
+  /**
+   * @description
+   * - Creates a handler function with the specified OpenAPI specification.
+   * @param handler - The handler function.
+   * @returns The handler function.
+   * @example
+   * ```typescript
+   * const spec = $.spec(<const>{
+   *   summary: "Create a new user",
+   *   requestBody: {
+   *     required: true,
+   *     content: {
+   *       "application/json": {
+   *         schema: $.ref('#/components/schemas/User')
+   *       }
+   *     }
+   *   },
+   *   responses: {
+   *     200: {
+   *       description: "User created",
+   *       content: {
+   *         "application/json": {
+   *           schema: $.ref('#/components/schemas/User')
+   *         }
+   *       }
+   *     }
+   *   }
+   * })
+   * $.handler<typeof spec>(async (request) => {
+   *   return {id: 1, username: "alice", email: "alice@example.com", role: "user"};
+   * })
+   * ```
+   */
   handler<T extends OpenAPI.Operator>(handler: FromSpec.Method<T>){
     return handler;
   }
@@ -228,7 +261,7 @@ export class OpenApiRouter<T> {
     for (const {path:rawPath, methods} of this.routes) {
       const path = replacePathWithOpenApiParams(rawPath);
       newSpec.paths[path] = newSpec.paths[path] || {};
-      for (const [_method, {specification:originalSpec, handler}] of Object.entries(methods)) {
+      for (const [_method, {specification:originalSpec}] of Object.entries(methods)) {
         const method = _method as Router.OperatorName;
         const specification = this.options.specModifier ? this.options.specModifier(originalSpec) : originalSpec;
         newSpec.paths[path][method] = specification;
@@ -236,4 +269,37 @@ export class OpenApiRouter<T> {
     }
     return newSpec as OpenAPI.Document;
   }
+
+  //////////////////////// PRIVATE METHODS ////////////////////////
+
+  private readonly hooks = {
+    preValidation: (request: FastifyRequest, reply: FastifyReply) => {
+      const method = request.method;
+      const route = request.routeOptions.url;
+      if (method === "GET" || !route) return;
+      const paths = this.specification.paths
+      const reqBodySpec = (paths as any)?.[route]?.[method]?.['requestBody'];
+      if (!reqBodySpec) return;
+      const {isValid, errors} = validateRequestBody(reqBodySpec, request);
+      if (!isValid) {
+        reply.status(400).send({error: "Invalid request body", errors});
+      }
+      return;
+    },
+    preSerialization: (request: FastifyRequest, reply: FastifyReply, payload: any) => {
+      const method = request.method;
+      const route = request.routeOptions.url;
+      const status = reply.statusCode;
+      if (!route) return;
+      const paths = this.specification.paths
+      const resBodySpec = (paths as any)?.[route]?.[method]?.['responses']?.[status.toString()];
+      if (!resBodySpec) return;
+      const {isValid, errors} = validateResponse(resBodySpec, reply, payload);
+      if (!isValid) {
+        reply.status(500).send({error: "Invalid response body", errors});
+      }
+      return;
+    }
+  }
+
 }
