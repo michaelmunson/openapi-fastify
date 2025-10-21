@@ -1,18 +1,18 @@
 import { FastifyRequest } from "fastify";
-import { OpenApiPathOperator, MethodFromSpec, OpenApiParameter, OpenAPIV3, OpenApiRequestBody, OpenApiSchema } from "./types";
+import { OpenAPI, FromSpec } from "./types";
 import { RouterOptions } from "./types/router.types";
 import Ajv from "ajv";
 
 export const OPERATOR_NAMES = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head'] as const;
 
-const parseQueryParams = <T extends OpenApiPathOperator>(specification: T, request: FastifyRequest) => {
-  const {parameters} = specification as {parameters:OpenApiParameter[] | undefined};
+const parseQueryParams = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
+  const {parameters} = specification as {parameters:OpenAPI.Parameter[] | undefined};
   const {query} = request as {query:Record<string,string>};
   if (!parameters) return query;
   const queryParamsTypes = Object.fromEntries(
     parameters
       .filter(p => p.in === 'query')
-      .map(p => [p.name, (p.schema as OpenAPIV3.SchemaObject)?.type ?? 'string'])
+      .map(p => [p.name, (p.schema as OpenAPI.Schema)?.type ?? 'string'])
   );
   const queryParams:Record<string,any> = {};
   for (const [qpName, qpType] of Object.entries(queryParamsTypes)) {
@@ -32,14 +32,14 @@ const parseQueryParams = <T extends OpenApiPathOperator>(specification: T, reque
   return queryParams;
 }
 
-const validateRequestBody = <T extends OpenApiPathOperator>(specification: T, request: FastifyRequest) => {
+const validateRequestBody = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
   const ajv = new Ajv();
-  const {requestBody} = specification as {requestBody:OpenApiRequestBody | undefined};
+  const {requestBody} = specification as {requestBody:OpenAPI.RequestBody | undefined};
   if (!requestBody) return {isValid:true};
   const {content, required} = requestBody;
   if (!content && !required) return {isValid:true};
   if (!content) return {isValid:false};
-  const {schema} = content['application/json'] as {schema:OpenApiSchema};
+  const {schema} = content['application/json'] as {schema:OpenAPI.Schema};
   const validate = ajv.compile(schema);
   const isValid = validate(request.body);
   return {
@@ -48,12 +48,12 @@ const validateRequestBody = <T extends OpenApiPathOperator>(specification: T, re
   };
 }
 
-const parseRequestBody = <T extends OpenApiPathOperator>(specification: T, request: FastifyRequest) => {
-  const { requestBody } = specification as { requestBody: OpenApiRequestBody | undefined };
+const parseRequestBody = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
+  const { requestBody } = specification as { requestBody: OpenAPI.RequestBody | undefined };
   if (!requestBody) return request.body;
   const { content } = requestBody;
   if (!content || !content['application/json']) return request.body;
-  const { schema } = content['application/json'] as { schema: OpenApiSchema };
+  const { schema } = content['application/json'] as { schema: OpenAPI.Schema };
   if (!schema || typeof request.body !== 'object' || request.body === null) return request.body;
 
   // Helper to recursively apply defaults
@@ -61,7 +61,7 @@ const parseRequestBody = <T extends OpenApiPathOperator>(specification: T, reque
     if (!schema || typeof schema !== 'object') return obj;
     if (schema.type === 'object' && schema.properties) {
       const result: any = { ...obj };
-      for (const [key, propSchema] of Object.entries(schema.properties) as [string, OpenApiSchema][]) {
+      for (const [key, propSchema] of Object.entries(schema.properties) as [string, OpenAPI.Schema][]) {
         if (result[key] === undefined) {
           if (propSchema && typeof propSchema === 'object' && 'default' in propSchema) {
             result[key] = propSchema.default;
@@ -86,7 +86,7 @@ const parseRequestBody = <T extends OpenApiPathOperator>(specification: T, reque
 }
 
 
-export const modifyHandler = <T extends OpenApiPathOperator>(specification: T, method: MethodFromSpec<T>, options:RouterOptions) => {
+export const modifyHandler = <T extends OpenAPI.Operator>(specification: T, method: FromSpec.Method<T>, options:RouterOptions) => {
   const {
     parseQueryParams:isParseQueryParams,
     enforceRequestBodySchema:isEnforceRequestBodySchema,
@@ -96,7 +96,7 @@ export const modifyHandler = <T extends OpenApiPathOperator>(specification: T, m
   if (!isParseQueryParams && !isEnforceRequestBodySchema && !isParseRequestBody)
     return method;
   
-  return async (...params: Parameters<MethodFromSpec<T>>) => {
+  return async (...params: Parameters<FromSpec.Method<T>>) => {
     const [request, reply] = params;
     if (isParseQueryParams) {
       const newQuery = parseQueryParams(specification, request as FastifyRequest);

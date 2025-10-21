@@ -131,52 +131,48 @@ export type BodyToRecord<T extends OpenAPI.RequestBody> =
 
 export type RequestBodyToRecord<T extends OpenAPI.RequestBody> = BodyToRecord<T>;
 
-export type ResponseToRecord<T> = 
-  T extends {
-    responses: {
-      200: {
-        content: {
-          'application/json': {
-            schema: infer Schema
+
+export type ResponseToRecord<T> =
+  T extends { responses: infer Responses }
+    ? {
+        [K in keyof Responses]:
+          Responses[K] extends {
+            content: {
+              'application/json': {
+                schema: infer Schema
+              }
+            }
           }
-        }
-      }
-    }
-  } 
-  ? SchemaToType<Schema>
-  : T extends {
-    responses: {
-      201: {
-        content: {
-          'application/json': {
-            schema: infer Schema
-          }
-        }
-      }
-    }
-  }
-  ? SchemaToType<Schema>
-  : any;
+            ? SchemaToType<Schema>
+            : never
+      }[keyof Responses]
+    : never;
+
+// export type ResponseToRecord<T> = 
+//   T extends {
+//     responses: {
+//       200: {
+//         content: {
+//           'application/json': {
+//             schema: infer Schema
+//           }
+//         }
+//       }
+//     }
+//   } 
+//   ? SchemaToType<Schema>
+//   : T extends {
+//     responses: {
+//       201: {
+//         content: {
+//           'application/json': {
+//             schema: infer Schema
+//           }
+//         }
+//       }
+//     }
+//   }
+//   ? SchemaToType<Schema>
+//   : any;
 
 export type SchemaToRecord<Schema> = SchemaToType<Schema>;
-
-export type RefStringToRecord<Document, Ref> = 
-  Ref extends `#/components/schemas/${infer SchemaName}`
-    ? Document extends { components: { schemas: infer Schemas } }
-      ? SchemaName extends keyof Schemas
-        ? Schemas[SchemaName]
-        : never
-      : never
-    : never;
-
-
-export type RefStringToComponentRecord<Document, Ref extends string> =
-  Ref extends `#/components/${infer Section}/${infer Name}`
-    ? Document extends { components: Record<string, any> }
-      ? Section extends keyof Document['components']
-        ? Name extends keyof Document['components'][Section]
-          ? Document['components'][Section][Name]
-          : never
-        : never
-      : never
-    : never;

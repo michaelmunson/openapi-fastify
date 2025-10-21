@@ -10,7 +10,7 @@ const specification = <const>{
       User: {
         type: 'object',
         properties: {
-          id: { type: 'string' },
+          id: { type: 'number' },
           username: { type: 'string' },
           email: { type: 'string' },
           role: { type: 'string' }
@@ -31,14 +31,14 @@ const specification = <const>{
           }
         }
       },
-      '201': {
-        description: 'User created',
+      BadRequest: {
+        description: 'Bad Request',
         content: {
           'application/json': {
             schema: {
               type: 'object',
               properties: {
-                id: { type: 'string' }
+                error: { type: 'string' }
               }
             }
           }

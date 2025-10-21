@@ -1,6 +1,7 @@
-import { $ } from "./app";
+import { $ } from "../app";
 
-import { db, dbHelpers } from "./db.mock";
+import { db, dbHelpers } from "../db.mock";
+
 
 // GET /hello - returns a simple hello message
 $.route("/hello", {
@@ -69,8 +70,8 @@ $.route("/users", {
       // Extract query params
       const { role, limit } = request.query;
       if (typeof limit === 'string'){
-        reply.status(400);
-        return {error: "Limit must be an integer"};
+        reply.status(400).send({error: "Limit must be an integer"});
+        return {error: 'aas'};
       }
       
       let users = db.users;
@@ -96,7 +97,7 @@ $.route("/users", {
 // GET /users/:id - get user by id (without password)
 $.route("/users/:id", {
   get: $.op(
-    {
+    <const>{
       summary: "Get user by id",
       parameters: <const>[
         {

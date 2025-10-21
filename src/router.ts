@@ -1,7 +1,5 @@
 import { FastifyInstance } from "fastify";
-import { MethodFromSpec, MethodRecord, Operator, OperatorName, RefStrings } from "./types";
-import {RefStringToComponentRecord, RefStringToRecord} from "./types/operator.types";
-import {OpenAPI} from ".";
+import {OpenAPI, FromSpec, Router} from ".";
 import { RouterOptions } from "./types/router.types";
 import { modifyHandler, replacePathWithOpenApiParams } from "./utils";
 
@@ -45,12 +43,12 @@ import { modifyHandler, replacePathWithOpenApiParams } from "./utils";
 export class OpenApiRouter<T> {
   readonly routes: Array<{
     path: string;
-    methods: MethodRecord;
+    methods: Router.OperatorRecord;
   }> = [];
 
   constructor(readonly app: FastifyInstance, readonly document: T, readonly options:RouterOptions={}) {}
 
-  route(path:string, methods:MethodRecord) {
+  route(path:string, methods:Router.OperatorRecord) {
     const route = {
       path,
       methods
@@ -59,14 +57,14 @@ export class OpenApiRouter<T> {
     return route;
   }
 
-  op<T extends OpenAPI.Operator>(specification: T, handler: MethodFromSpec<T>): Operator<T> {
+  op<T extends OpenAPI.Operator>(specification: T, handler: FromSpec.Method<T>): Router.Operator<T> {
     return {
       specification,
       handler: modifyHandler(specification, handler, this.options)
     }
   }
 
-  ref<S extends RefStrings<T>>(ref: S, {useRef}: {useRef: boolean} = {useRef: false}): RefStringToComponentRecord<T, S> {
+  ref<S extends FromSpec.Refs<T>>(ref: S, {useRef}: {useRef: boolean} = {useRef: false}): FromSpec.ComponentFromRef<T, S> {
     const [,,schema] = (ref as string).replace('#/', '').split('/');
     const component = (this.document as any).components.schemas[schema];
     if (useRef) {
@@ -81,8 +79,8 @@ export class OpenApiRouter<T> {
 
   initialize() {
     for (const {path, methods} of this.routes) {
-      for (const [_method, {specification:originalSpec, handler}] of Object.entries(methods)) {
-        const method = _method as OperatorName;
+      for (const [_method, {specification:originalSpec, handler}] of Object.entries(methods) as [Router.OperatorName, Router.Operator<OpenAPI.Operator>][]) {
+        const method = _method;
         const specification = this.options.specModifier ? this.options.specModifier(originalSpec) : originalSpec;
         this.app[method](path, {
           schema: specification as any
@@ -99,7 +97,7 @@ export class OpenApiRouter<T> {
       const path = replacePathWithOpenApiParams(rawPath);
       newSpec.paths[path] = newSpec.paths[path] || {};
       for (const [_method, {specification:originalSpec, handler}] of Object.entries(methods)) {
-        const method = _method as OperatorName;
+        const method = _method as Router.OperatorName;
         const specification = this.options.specModifier ? this.options.specModifier(originalSpec) : originalSpec;
         newSpec.paths[path][method] = specification;
       }

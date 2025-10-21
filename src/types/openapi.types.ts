@@ -1,5 +1,5 @@
 import { OpenAPIV3 } from "openapi-types";
-import { OperatorName } from "./types";
+import { OperatorName } from "./router.types";
 
 export type {OpenAPIV3}
 export type Document = OpenAPIV3.Document;

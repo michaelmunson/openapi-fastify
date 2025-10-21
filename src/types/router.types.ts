@@ -1,4 +1,5 @@
-import { Operator } from "./openapi.types";
+import { FromSpec, OpenAPI } from ".";
+import { OPERATOR_NAMES } from "../utils";
 
 export type RouterOptions = {
   /**
@@ -6,7 +7,7 @@ export type RouterOptions = {
    * @param spec - The OpenAPI specification.
    * @returns The modified OpenAPI specification.
    */
-  specModifier?: (spec: Operator) => Operator,
+  specModifier?: (spec: OpenAPI.Operator) => OpenAPI.Operator,
   /**
    * @description
    * - Whether to parse query parameters.
@@ -36,4 +37,15 @@ export type RouterOptions = {
    * @default false
    */
   parseRequestBody?: boolean,
+}
+
+export type OperatorName = typeof OPERATOR_NAMES[number];
+
+export type Operator<T extends OpenAPI.Operator> = {
+  specification: T,
+  handler: FromSpec.Method<T>
+}
+
+export type OperatorRecord = {
+  [K in OperatorName]?: Operator<OpenAPI.Operator>
 }
