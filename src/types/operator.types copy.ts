@@ -38,46 +38,74 @@ export type SchemaToType<Schema> =
   Schema extends { $ref: string }
   ? any
 
+  // --- Handle Combinators ---
+  : Schema extends { oneOf: infer OneOf extends any[] }
+  ? SchemaToOneOf<OneOf>
+
+  : Schema extends { anyOf: infer AnyOf extends any[] }
+  ? SchemaToAnyOf<AnyOf>
+
+  : Schema extends { allOf: infer AllOf extends any[] }
+  ? SchemaToAllOf<AllOf>
+
+  // --- Enums and Consts ---
   : Schema extends { enum: infer EnumValues extends readonly any[] }
   ? EnumValues[number]
 
   : Schema extends { const: infer ConstValue }
   ? ConstValue
 
+  // --- Arrays ---
   : Schema extends { type: 'array'; items: infer Items }
   ? Array<SchemaToType<Items>>
 
+  // --- Objects ---
   : Schema extends { type: 'object'; properties: infer Props }
   ? {
-    [K in keyof Props as K extends RequiredKey<Schema, K> ? K : never]: SchemaToType<Props[K]>
-  } & {
-    [K in keyof Props as K extends RequiredKey<Schema, K> ? never : K]?: SchemaToType<Props[K]>
-  } & (Schema extends { additionalProperties: infer Additional }
-    ? Additional extends false
-    ? {}
-    : Additional extends { type: any }
-    ? { [key: string]: SchemaToType<Additional> }
-    : { [key: string]: any }
-    : {})
+      [K in keyof Props as K extends RequiredKey<Schema, K> ? K : never]: SchemaToType<Props[K]>
+    } & {
+      [K in keyof Props as K extends RequiredKey<Schema, K> ? never : K]?: SchemaToType<Props[K]>
+    } & (Schema extends { additionalProperties: infer Additional }
+      ? Additional extends false
+        ? {}
+        : Additional extends { type: any }
+        ? { [key: string]: SchemaToType<Additional> }
+        : { [key: string]: any }
+      : {})
 
   : Schema extends { type: 'object'; additionalProperties: infer Additional }
   ? Additional extends false
-  ? Record<string, never>
-  : Additional extends { type: any }
-  ? Record<string, SchemaToType<Additional>>
-  : Record<string, any>
+    ? Record<string, never>
+    : Additional extends { type: any }
+    ? Record<string, SchemaToType<Additional>>
+    : Record<string, any>
 
+  // --- Primitives ---
   : Schema extends { type: infer Type; format?: infer Format }
   ? Type extends 'string'
-  ? Format extends 'date' | 'date-time' | 'time'
-  ? string 
-  : Format extends 'binary' | 'byte'
-  ? string | Blob
-  : string
-  : StringTypeToType<Type>
+    ? Format extends 'date' | 'date-time' | 'time'
+      ? string
+      : Format extends 'binary' | 'byte'
+      ? string | Blob
+      : string
+    : StringTypeToType<Type>
+
   : Schema extends { type: infer Type }
   ? StringTypeToType<Type>
+
   : any;
+
+  type SchemaToOneOf<T extends any[]> = T[number] extends infer Each
+  ? SchemaToType<Each>
+  : never;
+
+type SchemaToAnyOf<T extends any[]> = T[number] extends infer Each
+  ? SchemaToType<Each>
+  : never;
+
+type SchemaToAllOf<T extends any[]> =
+  UnionToIntersection<SchemaToType<T[number]>>;
+
 
 type RequiredKey<Schema, K> =
   Schema extends { required: infer Req extends readonly any[] }
@@ -121,7 +149,7 @@ export type BodyToRecord<T extends OpenApiRequestBody> =
 
 export type SchemaToRecord<Schema> = SchemaToType<Schema>;
 
-// Example of a fairly complex JSON Schema type
+/* // Example of a fairly complex JSON Schema type
 export const ExampleComplexSchema = {
   type: "object",
   required: ["user", "items", "status"],
@@ -186,7 +214,7 @@ export const ExampleComplexSchema = {
             minimum: 1
           },
           meta: {
-            oneOf: [
+            allOf: [
               {
                 type: "object",
                 properties: {
@@ -238,3 +266,30 @@ export const ExampleComplexSchema = {
 } as const;
 
 export type ExampleComplexSchemaType = SchemaToType<typeof ExampleComplexSchema>;
+
+const x:ExampleComplexSchemaType = {
+  items: [
+    {
+      type: 'book',
+      quantity: 2,
+    }
+  ],
+  status: 'archived',
+  user: {
+    id: '123',
+    profile: {
+      name: 'John Doe',
+      email: 'john.doe@example.com',
+      roles: ['admin'],
+      address: {
+        street: '123 Main St',
+        city: 'New York',
+        coordinates: {
+          lat: 40.7128,
+          lng: -74.0060
+        }
+      }
+    }
+  },
+  tags: []
+} */
