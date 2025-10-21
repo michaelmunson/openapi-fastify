@@ -5,9 +5,14 @@ import specification from "./specification";
 const app = Fastify();
 
 export const $ = new OpenApiRouter(app, specification, {
-  parseQueryParams: true,
-  enforceRequestBodySchema: true,
-  parseRequestBody: true,
+  autoValidate: {
+    request: {
+      validate: false,
+    },
+    response: {
+      validate: true
+    }
+  }
 });
 
 export default app;
