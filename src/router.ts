@@ -1,7 +1,10 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { OpenAPI, FromSpec, Router } from ".";
-import { RouterOptions } from "./types/router.types";
-import { AUTO_VALIDATION_DEFAULTS, debugLog, replacePathWithOpenApiParams, validateRequestBody, validateResponse } from "./utils";
+import { AutoLoadConfig, RouterOptions } from "./types/router.types";
+import { AUTO_VALIDATION_DEFAULTS, debugLog, getCallerDir, replacePathWithOpenApiParams } from "./utils";
+import {globSync} from "glob";
+import { readdirSync } from "fs";
+import { join } from "path";
 import Ajv from "ajv";
 
 /**
@@ -253,6 +256,41 @@ export class OpenApiRouter<T> {
         this.app.addHook('preSerialization', this.hooks.preSerialization);
       }
     }
+    return this.app;
+  }
+
+  /**
+   * @description
+   * - Autoloads routes from the specified directory.
+   * @param include - The files to include.
+   * @param exclude - The files to exclude.
+   * @returns The Fastify instance.
+   * @example
+   * ```typescript
+   * $.autoload({ include: ['**\/*.ts'], exclude: ['*.exclude.*'] });
+   * ```
+   */
+  async autoload({ include, exclude }: AutoLoadConfig) {
+    const toInclude = Array.isArray(include) ? include : include ? [include] : ['**/*.ts'];
+    const toExclude = Array.isArray(exclude) ? exclude : exclude ? [exclude] : [];
+    const callerDir = getCallerDir();
+
+    // Resolve paths relative to the caller directory
+    const files = globSync(toInclude, {
+      cwd: callerDir,
+      ignore: toExclude,
+      absolute: true
+    }).filter(file => file.endsWith('.ts') || file.endsWith('.js') || file.endsWith('.mjs') || file.endsWith('.cjs'));
+    const results = await Promise.all(files.map(async file => {
+      try {
+        return [file, await import(file)]
+      } catch (error) {
+        debugLog(`Error loading file ${file}:`, error);
+        return [null, null]
+      }
+    })).then(results => results.filter(([file, result]) => file && result));
+    debugLog('Loaded files', results.map(([file]) => file));
+    this.initialize();
     return this.app;
   }
 

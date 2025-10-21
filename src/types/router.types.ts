@@ -53,3 +53,8 @@ export type Operator<T extends OpenAPI.Operator> = {
 export type OperatorRecord = {
   [K in OperatorName]?: Operator<OpenAPI.Operator>
 }
+
+export type AutoLoadConfig = {
+  include?: string | string[],
+  exclude?: string | string[],
+}

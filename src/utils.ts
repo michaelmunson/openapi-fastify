@@ -1,6 +1,8 @@
 import { FastifyReply, FastifyRequest } from "fastify";
 import { OpenAPI } from "./types";
 import Ajv from "ajv";
+import { dirname } from "path";
+import { fileURLToPath } from "url";
 
 export const OPERATOR_NAMES = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head'] as const;
 
@@ -107,38 +109,6 @@ export const debugLog = (...args: any[]) => {
     console.log('[openapi-fastify]',...args);
   }
 }
-/* export const modifyHandler = <T extends OpenAPI.Operator>(specification: T, method: FromSpec.Method<T>, options:RouterOptions): FromSpec.Method<T> => {
-  const {
-    parseQueryParams:isParseQueryParams,
-    enforceRequestBodySchema:isEnforceRequestBodySchema,
-    parseRequestBody:isParseRequestBody
-  } = options;
-  
-  if (!isParseQueryParams && !isEnforceRequestBodySchema && !isParseRequestBody)
-    return method;
-  
-  return async (...params: Parameters<FromSpec.Method<T>>): Promise<FromSpec.Response<T>> => {
-    const [request, reply] = params;
-    if (isParseQueryParams) {
-      const newQuery = parseQueryParams(specification, request as FastifyRequest);
-      request.query = newQuery as any;
-    }
-    if (isEnforceRequestBodySchema) {
-      const {isValid, errors} = validateRequestBody(specification, request as FastifyRequest);
-      if (!isValid) {
-        reply.status(400);
-        return {error: "Invalid request body", errors} as FromSpec.Response<T>;
-      }
-    }
-    if (isParseRequestBody) {
-      const newBody = parseRequestBody(specification, request as FastifyRequest);
-      request.body = newBody as any;
-    }
-
-    return await method(request, reply);
-  }
-}
- */
 
 export const replacePathWithOpenApiParams = (path: string) => path.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, "{$1}");
 
@@ -157,4 +127,15 @@ export const AUTO_VALIDATION_DEFAULTS = {
       payload: {error: "Invalid Response", errors: []}
     }
   }
+}
+
+export function getCallerDir() {
+  const err = new Error();
+  const stack = err.stack?.split("\n");
+  if (!stack) return process.cwd();
+  const callerLine = stack[3];
+  const match = callerLine.match(/\((.*):\d+:\d+\)/);
+  if (!match) return process.cwd(); // fallback
+  const callerFile = match[1];
+  return dirname(fileURLToPath(`file://${callerFile}`));
 }
