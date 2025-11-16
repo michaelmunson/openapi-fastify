@@ -4,11 +4,6 @@ import specification from "./specification";
 
 const app = Fastify();
 
-// app.addHook('preValidation', async (req, reply) => {
-//   console.log(req.routeOptions.url);
-//   return;
-// })
-
 export const $ = new OpenApiRouter(app, specification, {
   autoValidate: {
     request: {

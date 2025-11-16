@@ -1,6 +1,7 @@
 import {ErrorObject} from "ajv";
 import { FromSpec, OpenAPI } from ".";
 import { OPERATOR_NAMES } from "../utils";
+import {Options as AjvOptions} from "ajv";
 
 export type RouterOptions = {
   /**
@@ -14,6 +15,7 @@ export type RouterOptions = {
    * - Whether to automatically validate the request body and response.
    */
   autoValidate?: {
+    config?: AjvOptions,
     /**
      * @description
      * - Whether to automatically validate the request body.

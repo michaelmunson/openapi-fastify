@@ -42,11 +42,12 @@ const specification = <const>{
                 id: { type: 'number' },
                 username: { type: 'string' },
                 email: { type: 'string' },
+                createdAt: { type: 'string', format: 'date-time', nullable: true },
                 roles: { type: 'array', items: {
                   type: 'string',
                   enum: ['admin', 'user'],
                 } }
-              }
+              },
             }
           }
         }

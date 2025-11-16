@@ -198,7 +198,8 @@ $.route("/users", {
               properties: {
                 userId: { type: "integer" },
                 title: { type: "string" },
-                content: { type: "string" }
+                content: { type: "string" },
+                birthday: { type: "string", format: "date-time" }
               },
               required: ["userId", "title", "content"]
             }
@@ -211,7 +212,7 @@ $.route("/users", {
     },
     async (request, reply) => {
       const { username, email, password, role } = request.body as any;
-      const user = dbHelpers.addUser({ username, email, password, role });
+      const user = dbHelpers.addUser({ username, email, password, role, createdAt: new Date().toISOString() });
       const { password: _, ...rest } = user;
       reply.code(201);
       return rest;

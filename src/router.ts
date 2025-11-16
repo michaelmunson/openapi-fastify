@@ -3,9 +3,10 @@ import { OpenAPI, FromSpec, Router } from ".";
 import { AutoLoadConfig, RouterOptions } from "./types/router.types";
 import { AUTO_VALIDATION_DEFAULTS, debugLog, getCallerDir, replacePathWithOpenApiParams } from "./utils";
 import {globSync} from "glob";
-import { readdirSync } from "fs";
-import { join } from "path";
 import Ajv from "ajv";
+import ajvFormats from "ajv-formats";
+
+
 
 /**
  * OpenApiRouter is a class that integrates OpenAPI specifications with Fastify routing.
@@ -45,12 +46,17 @@ import Ajv from "ajv";
  */
 
 export class OpenApiRouter<T> {
+  private readonly ajv: Ajv;
   readonly routes: Array<{
     path: string;
     methods: Router.OperatorRecord;
   }> = [];
 
-  constructor(readonly app: FastifyInstance, readonly document: T, readonly options: RouterOptions = {}) { }
+  constructor(readonly app: FastifyInstance, readonly document: T, readonly options: RouterOptions = {}) {
+    const ajvOptions:Exclude<RouterOptions['autoValidate'], undefined>['config'] = options?.autoValidate?.config || {allErrors: true};
+    this.ajv = new Ajv(ajvOptions);
+    ajvFormats(this.ajv)
+  }
 
   /**
    * @description
@@ -327,18 +333,14 @@ export class OpenApiRouter<T> {
       const payload = request.body;
       const method = request.method.toLowerCase();
       const route = replacePathWithOpenApiParams(request.routeOptions.url ?? '');
-      debugLog('preValidation', method, route);
       if (method === "get" || !route || !payload) return;
       const paths = this.specification.paths
       const reqBodyContent = (paths as any)?.[route]?.[method]?.['requestBody']?.['content'];
       const reqBodySpec = (Object.values(reqBodyContent)[0] as { schema?: any })?.schema;
-      debugLog('Request Body Spec', reqBodySpec);
-      debugLog('Payload', payload)
       if (!reqBodySpec) return;
-      const validate = new Ajv().compile(reqBodySpec)
+      const validate = this.ajv.compile(reqBodySpec)
       const isValid = validate(payload);
       const errors = validate.errors;
-      debugLog('Validation Result', isValid, errors);
       if (!isValid) {
         const status = this.options?.autoValidate?.request?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.request.errorResponse.status;
         const payload = this.options?.autoValidate?.request?.errorResponse?.payload || { ...AUTO_VALIDATION_DEFAULTS.request.errorResponse.payload, errors };
@@ -350,21 +352,14 @@ export class OpenApiRouter<T> {
       const method = request.method.toLowerCase();
       const route = replacePathWithOpenApiParams(request.routeOptions.url ?? '');
       if (!payload) return
-      debugLog('Route', route);
       const status = reply.statusCode;
-      debugLog('Status', status)
       const paths = this.specification.paths;
-      debugLog('Paths', Object.keys(paths), (paths as any)[route][method])
       const resBodyContent = (paths as any)?.[route]?.[method]?.['responses']?.[status.toString()]?.['content'] ?? {};
       const resBodySpec = (Object.values(resBodyContent)[0] as { schema?: any })?.schema;
-      debugLog('Response Body Spec', JSON.stringify(resBodySpec));
-      debugLog('Payload', payload)
       if (!resBodySpec) return;
-      const validate = new Ajv().compile(resBodySpec)
+      const validate = this.ajv.compile(resBodySpec)
       const isValid = validate(payload);
       const errors = validate.errors;
-      // const { isValid, errors } = validateResponse(resBodySpec, reply, payload);
-      debugLog('Validation Result', isValid, errors);
       if (!isValid) {
         const status = this.options?.autoValidate?.response?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.response.errorResponse.status;
         const payload = this.options?.autoValidate?.response?.errorResponse?.payload || { ...AUTO_VALIDATION_DEFAULTS.response.errorResponse.payload, errors };
