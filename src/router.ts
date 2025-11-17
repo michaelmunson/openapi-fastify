@@ -1,8 +1,8 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { OpenAPI, FromSpec, Router } from ".";
 import { AutoLoadConfig, RouterOptions } from "./types/router.types";
-import { AUTO_VALIDATION_DEFAULTS, debugLog, getCallerDir, replacePathWithOpenApiParams } from "./utils";
-import {globSync} from "glob";
+import { AUTO_VALIDATION_DEFAULTS, debugGroup, debugLog, debugLogEnd, getAutoValidateConfig, getCallerDir, getOperationOptions, getOperationPath, getRequestBodySchema, getResponseSchema, replacePathWithOpenApiParams } from "./utils";
+import { globSync } from "glob";
 import Ajv from "ajv";
 import ajvFormats from "ajv-formats";
 
@@ -50,10 +50,12 @@ export class OpenApiRouter<T> {
   readonly routes: Array<{
     path: string;
     methods: Router.OperatorRecord;
+    options?: Router.RouteOptions;
   }> = [];
 
   constructor(readonly app: FastifyInstance, readonly document: T, readonly options: RouterOptions = {}) {
-    const ajvOptions:Exclude<RouterOptions['autoValidate'], undefined>['config'] = options?.autoValidate?.config || {allErrors: true};
+    const autoValidate = options?.autoValidate;
+    const ajvOptions = typeof autoValidate === 'object' ? autoValidate?.config : { allErrors: true };
     this.ajv = new Ajv(ajvOptions);
     ajvFormats(this.ajv)
   }
@@ -93,10 +95,11 @@ export class OpenApiRouter<T> {
       });
   * ```
    */
-  route(path: string, methods: Router.OperatorRecord) {
+  route(path: string, methods: Router.OperatorRecord, options?: Router.RouteOptions) {
     const route = {
       path,
-      methods
+      methods,
+      options
     }
     this.routes.push(route);
     return route;
@@ -135,10 +138,11 @@ export class OpenApiRouter<T> {
     )
    * ```
    */
-  op<T extends OpenAPI.Operator>(specification: T, handler: FromSpec.Method<T>): Router.Operator<T> {
+  op<T extends OpenAPI.Operator>(specification: T, handler: FromSpec.Method<T>, options?: Router.OperatorOptions): Router.Operator<T> {
     return {
       specification,
-      handler
+      handler,
+      options
     }
   }
 
@@ -242,25 +246,26 @@ export class OpenApiRouter<T> {
    * ```
    */
   initialize() {
-    for (const { path, methods } of this.routes) {
-      for (const [_method, { specification: originalSpec, handler }] of Object.entries(methods) as [Router.OperatorName, Router.Operator<OpenAPI.Operator>][]) {
-        const method = _method;
+    let isAutoValidate = this.options.autoValidate
+    for (const { path: rawPath, methods, options: routeOptions = {} } of this.routes) {
+      for (const [method, { specification: originalSpec, handler, options: operatorOptions = {} }] of Object.entries(methods) as [Router.OperatorName, Router.Operator<OpenAPI.Operator>][]) {
+        const operationOptions = getOperationOptions({ operatorOptions, routeOptions, routerOptions: this.options });
+        const path = getOperationPath(rawPath, operationOptions);
         const specification = this.options.specModifier ? this.options.specModifier(originalSpec) : originalSpec;
         this.app[method](path, {
           schema: specification as any
         }, handler);
+        debugLog(`Registered Route: ${method?.toUpperCase()} ${path}`);
       }
     }
-    if (this.options.autoValidate) {
-      const { request, response } = this.options.autoValidate;
-      if (request && request.validate) {
-        debugLog('Applying preValidation hook')
-        this.app.addHook('preValidation', this.hooks.preValidation);
-      }
-      if (response && response.validate) {
-        debugLog('Applying preSerialization hook')
-        this.app.addHook('preSerialization', this.hooks.preSerialization);
-      }
+    const autoValidate = getAutoValidateConfig(this.options.autoValidate);
+    if (autoValidate.request.validate !== false) {
+      debugLog('Applying preValidation hook')
+      this.app.addHook('preValidation', this.hooks.preValidation);
+    }
+    if (autoValidate.response.validate !== false) {
+      debugLog('Applying preSerialization hook')
+      this.app.addHook('preSerialization', this.hooks.preSerialization);
     }
     return this.app;
   }
@@ -326,46 +331,90 @@ export class OpenApiRouter<T> {
     return newSpec as OpenAPI.Document;
   }
 
+  printRoutes(){
+    const toLog = [(this.specification?.info?.title ?? 'API Routes' ) + '\n'];
+    for (const { path: rawPath, methods } of this.routes) {
+      toLog.push(`  ${rawPath}`);
+      for (const [method, { specification }] of Object.entries(methods)) {
+        toLog.push(`    ${method?.toUpperCase()} | ${specification?.summary ?? ''}`);
+      }
+      toLog.push('');
+    }
+    console.log(toLog.join('\n'));
+  }
+
   //////////////////////// PRIVATE METHODS ////////////////////////
 
+  private describeOperation(...args: [request: FastifyRequest] | [method: Router.OperatorName, path: string]) {
+    let method: Router.OperatorName;
+    let path: string;
+    if (args.length === 1) {
+      const [request] = args
+      method = request.method?.toLowerCase() as Router.OperatorName;
+      path = request.routeOptions?.url ?? ''; //replacePathWithOpenApiParams(request.routeOptions?.url ?? '');
+    } else {
+      method = args[0] as Router.OperatorName;
+      path = args[1] as string;
+    }
+    const route = this.routes.find(r => r.path === path);
+    const operation = route?.methods?.[method];
+    const options = getOperationOptions({ operatorOptions: operation?.options, routeOptions: route?.options, routerOptions: this.options });
+    const autoValidate = getAutoValidateConfig(options?.autoValidate);
+    return { method, path, route, operation, options: { ...options, autoValidate } };
+  }
+
   private readonly hooks = {
+    // request validation hook
     preValidation: async (request: FastifyRequest, reply: FastifyReply) => {
       const payload = request.body;
-      const method = request.method.toLowerCase();
-      const route = replacePathWithOpenApiParams(request.routeOptions.url ?? '');
-      if (method === "get" || !route || !payload) return;
-      const paths = this.specification.paths
-      const reqBodyContent = (paths as any)?.[route]?.[method]?.['requestBody']?.['content'];
-      const reqBodySpec = (Object.values(reqBodyContent)[0] as { schema?: any })?.schema;
-      if (!reqBodySpec) return;
-      const validate = this.ajv.compile(reqBodySpec)
-      const isValid = validate(payload);
-      const errors = validate.errors;
-      if (!isValid) {
-        const status = this.options?.autoValidate?.request?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.request.errorResponse.status;
-        const payload = this.options?.autoValidate?.request?.errorResponse?.payload || { ...AUTO_VALIDATION_DEFAULTS.request.errorResponse.payload, errors };
-        reply.status(status).send(typeof payload === 'function' ? payload(errors || []) : payload);
-        // return typeof payload === 'function' ? payload(errors || []) : payload;
+      const { method, path, operation, options: routeOptions } = this.describeOperation(request);
+      try {
+        if (method === 'get') return
+        debugGroup(`Validating Request Body | ${method} ${path}`);
+        if (!path) return debugLogEnd(`Skipping Request Body Validation (No Path)`);
+        if (!payload) return debugLogEnd(`Skipping Request Body Validation (No Payload)`);
+        if (!operation) return debugLogEnd(`Skipping Request Body Validation (No Operation)`);
+        if (routeOptions?.autoValidate?.request?.validate !== true) return debugLogEnd(`Skipping Request Body Validation (Auto Validate Disabled)`);
+        const reqBodySpec = getRequestBodySchema(operation.specification);
+        if (!reqBodySpec) {
+          return debugLogEnd(`Skipping Request Body Validation (No Request Body Schema)`);
+        };
+        const validate = this.ajv.compile(reqBodySpec)
+        const isValid = validate(payload);
+        const errors = validate.errors;
+        if (!isValid) {
+          debugLogEnd(`Request Body Validation Failed`, errors);
+          const autoValidate = getAutoValidateConfig(this.options.autoValidate);
+          const status = autoValidate?.request?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.request.errorResponse.status;
+          const payload = autoValidate?.request?.errorResponse?.payload || { ...AUTO_VALIDATION_DEFAULTS.request.errorResponse.payload, errors };
+          const response = typeof payload === 'function' ? payload(errors || []) : payload;
+          return reply.status(status).send(response);
+        }
+        return debugLogEnd(`Request Body Validation Passed`);
+      } catch (error) {
+        return debugLogEnd(`Error Validating Request Body`, error);
       }
     },
+    // response validation hook
     preSerialization: async (request: FastifyRequest, reply: FastifyReply, payload: any) => {
-      const method = request.method.toLowerCase();
-      const route = replacePathWithOpenApiParams(request.routeOptions.url ?? '');
-      if (!payload) return
-      const status = reply.statusCode;
-      const paths = this.specification.paths;
-      const resBodyContent = (paths as any)?.[route]?.[method]?.['responses']?.[status.toString()]?.['content'] ?? {};
-      const resBodySpec = (Object.values(resBodyContent)[0] as { schema?: any })?.schema;
-      if (!resBodySpec) return;
+      debugGroup(`Validating Response Body | ${request.method} ${request.routeOptions?.url}`);
+      if (!payload) return debugLogEnd(`Skipping Response Body Validation (No Payload)`);
+      const { operation, options: routeOptions } = this.describeOperation(request);
+      if (!operation) return debugLogEnd(`Skipping Response Body Validation (No Operation)`);
+      const resBodySpec = getResponseSchema(operation?.specification, reply);
+      if (!resBodySpec) return debugLogEnd(`Skipping Response Body Validation (No Response Body Schema)`);
       const validate = this.ajv.compile(resBodySpec)
       const isValid = validate(payload);
       const errors = validate.errors;
       if (!isValid) {
-        const status = this.options?.autoValidate?.response?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.response.errorResponse.status;
-        const payload = this.options?.autoValidate?.response?.errorResponse?.payload || { ...AUTO_VALIDATION_DEFAULTS.response.errorResponse.payload, errors };
-        reply.status(status);
-        return typeof payload === 'function' ? payload(errors || []) : payload;
+        debugLogEnd(`Response Body Validation Failed`, errors);
+        const autoValidate = getAutoValidateConfig(this.options.autoValidate);
+        const status = autoValidate?.response?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.response.errorResponse.status;
+        const payload = autoValidate?.response?.errorResponse?.payload || { ...AUTO_VALIDATION_DEFAULTS.response.errorResponse.payload, errors };
+        const response = typeof payload === 'function' ? payload(errors || []) : payload;
+        return reply.status(status).send(response);
       }
+      debugLogEnd(`Response Body Validation Passed`);
       return;
     }
   }

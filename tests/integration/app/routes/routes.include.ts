@@ -85,6 +85,39 @@ $.route("/users", {
 
       return result;
     }
+  ),
+  post: $.op(
+    <const>{
+      summary: "Create a new user",
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: {
+              type: "object",
+              properties: {
+                userId: { type: "integer" },
+                title: { type: "string" },
+                content: { type: "string" },
+                birthday: { type: "string", format: "date-time" }
+              },
+              required: ["userId", "title", "content"]
+            }
+          }
+        }
+      },
+      responses: {
+        201: $.ref('#/components/responses/UserCreated')
+      }
+    },
+    async (request, reply) => {
+      const { username, email, password, role } = request.body as any;
+      const user = dbHelpers.addUser({ username, email, password, role, createdAt: new Date().toISOString() });
+      const { password: _, ...rest } = user;
+      reply.code(201);
+      return rest;
+    },
+    {autoValidate: false}
   )
 });
 
@@ -180,42 +213,6 @@ $.route("/users/:id/posts", {
       // return {fish: 'horse'}
       if (process.env.FAIL_TEST_4==='true') return {fish:"horse"} as any
       return dbHelpers.getPostsByUserId(Number(id));
-    }
-  )
-});
-
-// POST /users - create a new user
-$.route("/users", {
-  post: $.op(
-    <const>{
-      summary: "Create a new user",
-      requestBody: {
-        required: true,
-        content: {
-          "application/json": {
-            schema: {
-              type: "object",
-              properties: {
-                userId: { type: "integer" },
-                title: { type: "string" },
-                content: { type: "string" },
-                birthday: { type: "string", format: "date-time" }
-              },
-              required: ["userId", "title", "content"]
-            }
-          }
-        }
-      },
-      responses: {
-        201: $.ref('#/components/responses/UserCreated')
-      }
-    },
-    async (request, reply) => {
-      const { username, email, password, role } = request.body as any;
-      const user = dbHelpers.addUser({ username, email, password, role, createdAt: new Date().toISOString() });
-      const { password: _, ...rest } = user;
-      reply.code(201);
-      return rest;
     }
   )
 });

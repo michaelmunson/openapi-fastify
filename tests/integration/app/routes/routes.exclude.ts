@@ -212,7 +212,7 @@ $.route("/users", {
     },
     async (request, reply) => {
       const { username, email, password, role } = request.body as any;
-      const user = dbHelpers.addUser({ username, email, password, role });
+      const user = dbHelpers.addUser({ username, email, password, role, createdAt: new Date().toISOString() });
       const { password: _, ...rest } = user;
       reply.code(201);
       return rest;
@@ -265,6 +265,7 @@ $.route("/posts", {
       const post = dbHelpers.addPost({ userId, title, content });
       reply.code(201);
       return post;
-    }
+    },
+    {autoValidate: true}
   )
 });

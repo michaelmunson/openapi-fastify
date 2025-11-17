@@ -1,5 +1,5 @@
 import {describe, it, expect} from "@jest/globals";
-import {app} from './app/initialized';
+import {app, $} from './app/initialized';
 
 export const hitMockServer = async (route: `/${string}`, options?:RequestInit) => {
   return await fetch(`http://localhost:${process.env.PORT! || 8888}${route}`, {
@@ -9,6 +9,7 @@ export const hitMockServer = async (route: `/${string}`, options?:RequestInit) =
 
 describe("Integration", () => {
   beforeAll(async () => {
+    $.printRoutes();
     await app.ready();
     await app.listen({ port: 8888 });
   });
@@ -128,7 +129,7 @@ describe("Integration", () => {
       // By default, additionalProperties is allowed unless schema says otherwise, so this should succeed
       // If you want to enforce no extra properties, set additionalProperties: false in schema
       // For now, expect 201
-      expect([201, 400, 500]).toContain(res.status);
+      expect(res.status).toBe(400);
       console.log(await res.json());
     }, 10000);
   });

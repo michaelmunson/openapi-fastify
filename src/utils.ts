@@ -3,8 +3,24 @@ import { OpenAPI } from "./types";
 import Ajv from "ajv";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
+import { AutoValidateConfig, AutoValidateRequestResponseConfig, OperatorOptions, RouteOptions, RouterOptions} from "./types/router.types";
 
 export const OPERATOR_NAMES = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head'] as const;
+
+
+export function deepMerge<Base extends object, Value extends Base = Base>(base: Base, value: Value): Base & Value {
+  const result = { ...base } as Base;
+  for (const key in value) {
+      const baseValue = (base as any)[key];
+      const updateValue = (value as any)[key];
+      if (baseValue && updateValue && typeof baseValue === 'object' && typeof updateValue === 'object') {
+          (result as any)[key] = deepMerge(baseValue, updateValue);
+      } else if (updateValue !== undefined) {
+          (result as any)[key] = updateValue;
+      }
+  }
+  return result as Base & Value;
+}
 
 export const parseQueryParams = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
   const {parameters} = specification as {parameters:OpenAPI.Parameter[] | undefined};
@@ -103,10 +119,21 @@ export const validateResponse = <T extends OpenAPI.Operator>(specification: T, r
   };
 }
 
-export const isDebugMode = () => process.env.DEBUG === 'true';
+export const isDebugMode = () => ['1', 'true'].includes(process.env.DEBUG_OPENAPI_FASTIFY ?? '');
+export const debugGroup = (...args: any[]) => {
+  if (isDebugMode()) {
+    console.group(...args);
+  }
+}
 export const debugLog = (...args: any[]) => {
   if (isDebugMode()) {
-    console.log('[openapi-fastify]',...args);
+    console.log(...args);
+  }
+}
+export const debugLogEnd = (...args: any[]) => {
+  if (isDebugMode()) {
+    if (args.length > 0) console.log(...args);
+    console.groupEnd();
   }
 }
 
@@ -138,4 +165,67 @@ export function getCallerDir() {
   if (!match) return process.cwd(); // fallback
   const callerFile = match[1];
   return dirname(fileURLToPath(`file://${callerFile}`));
+}
+
+export const getAutoValidateConfig = (autoValidate: AutoValidateConfig = false) : {
+  request: Exclude<AutoValidateRequestResponseConfig, boolean>,
+  response: Exclude<AutoValidateRequestResponseConfig, boolean>,
+} => {
+  if (autoValidate === true) return {
+    request: {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.request.errorResponse},
+    response: {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.response.errorResponse},
+  }
+  if (typeof autoValidate === 'object') {
+    return {
+      ...autoValidate,
+      request: autoValidate.request === true ? {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.request.errorResponse} : autoValidate.request as Exclude<AutoValidateRequestResponseConfig, boolean>,
+      response: autoValidate.response === true ? {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.response.errorResponse} : autoValidate.response as Exclude<AutoValidateRequestResponseConfig, boolean>,
+    }
+  }
+  return AUTO_VALIDATION_DEFAULTS;
+}
+
+export const getOperationPath = (path: string, options?: RouteOptions) => {
+  const pathArray = [...options?.prefix?.split('/') ?? '', ...path.split('/')].map(p => p.trim()).filter(Boolean);
+  return `/${pathArray.join('/')}`;
+}
+
+export const getOperationOptions = ({operatorOptions = {}, routeOptions = {}, routerOptions = {}}:{operatorOptions:OperatorOptions | undefined, routeOptions:RouteOptions | undefined, routerOptions:RouterOptions | undefined}) => {
+  const merge1 = deepMerge(routerOptions, routeOptions);
+  return deepMerge(merge1, operatorOptions);
+}
+
+export const getDefaultOperationOptions = ({operatorOptions = {}, routeOptions = {}, routerOptions = {}}:{operatorOptions:OperatorOptions | undefined, routeOptions:RouteOptions | undefined, routerOptions:RouterOptions | undefined}) : OperatorOptions => {
+  const operatorAutoValidate = getAutoValidateConfig(operatorOptions?.autoValidate);
+  const routeAutoValidate = getAutoValidateConfig(routeOptions?.autoValidate);
+  const routerAutoValidate = getAutoValidateConfig(routerOptions?.autoValidate);
+  return {
+    autoValidate: {
+      request: {
+        validate: operatorAutoValidate?.request?.validate ?? routeAutoValidate?.request?.validate ?? routerAutoValidate?.request?.validate ?? false,
+        errorResponse: operatorAutoValidate?.request?.errorResponse ?? routeAutoValidate?.request?.errorResponse ?? routerAutoValidate?.request?.errorResponse ?? AUTO_VALIDATION_DEFAULTS.request.errorResponse,
+      },
+      response: {
+        validate: operatorAutoValidate?.response?.validate ?? routeAutoValidate?.response?.validate ?? routerAutoValidate?.response?.validate ?? false,
+        errorResponse: operatorAutoValidate?.response?.errorResponse ?? routeAutoValidate?.response?.errorResponse ?? routerAutoValidate?.response?.errorResponse ?? AUTO_VALIDATION_DEFAULTS.response.errorResponse,
+      },
+    },
+  }
+}
+
+export const getRequestBodySchema = (specification: OpenAPI.Operator) => {
+  const {requestBody} = specification as {requestBody:OpenAPI.RequestBody | undefined};
+  if (!requestBody) return undefined;
+  const {content} = requestBody;
+  if (!content) return undefined;
+  const {schema} = content['application/json'] as {schema:OpenAPI.Schema};
+  return schema;
+}
+
+export const getResponseSchema = (specification: OpenAPI.Operator, response: FastifyReply) => {
+  const {responses} = specification as unknown as {responses:OpenAPI.Response | undefined};
+  if (!responses) return undefined;
+  const responseSchemaContent = responses?.[response.statusCode.toString() as keyof OpenAPI.Response] as {content?: Record<string, {schema:OpenAPI.Schema}>};
+  const schema = responseSchemaContent?.content?.['application/json']?.schema as OpenAPI.Schema | undefined;
+  return schema;
 }

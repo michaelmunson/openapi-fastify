@@ -7,7 +7,7 @@
   "scripts": {
     "build": "tsup",
     "deploy": "./sh/deploy",
-    "test": "jest integration",
+    "test": "jest",
     "create:docs": "typedoc --out ./docs ./src/index.ts"
   },
   "exports": {

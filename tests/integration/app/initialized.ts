@@ -3,4 +3,4 @@ import './routes/routes.include';
 
 export const initialized = $.initialize();
 
-export {app}
+export {app, $};
