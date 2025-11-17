@@ -9,7 +9,7 @@ export const hitMockServer = async (route: `/${string}`, options?:RequestInit) =
 
 describe("Integration", () => {
   beforeAll(async () => {
-    $.printRoutes();
+    console.log($.printRoutes());
     await app.ready();
     await app.listen({ port: 8888 });
   });
@@ -115,6 +115,26 @@ describe("Integration", () => {
     }, 10000);
     it("should reject POST /users with extra properties (schema enforcing)", async () => {
       // Add an extra property not in schema
+      const badUser = {
+        username: "baduser",
+        email: "baduser@example.com",
+        password: "testpassword",
+        foo: "bar"
+      };
+      const res = await hitMockServer("/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(badUser)
+      });
+      // By default, additionalProperties is allowed unless schema says otherwise, so this should succeed
+      // If you want to enforce no extra properties, set additionalProperties: false in schema
+      // For now, expect 201
+      expect(res.status).toBe(400);
+      console.log(await res.json());
+    }, 10000);
+    it("should allow POST /users with extra properties after toggling autoValidate.request to false", async () => {
+      // Add an extra property not in schema
+
       const badUser = {
         username: "baduser",
         email: "baduser@example.com",

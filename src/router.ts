@@ -96,8 +96,17 @@ export class OpenApiRouter<T> {
   * ```
    */
   route(path: string, methods: Router.OperatorRecord, options?: Router.RouteOptions) {
+    const routerOptions = getOperationOptions({ operatorOptions: undefined, routeOptions: options, routerOptions: this.options });
+    const newPath = getOperationPath(path, routerOptions);
+    const existingRoute = this.routes.find(r => r.path === newPath);
+    if (existingRoute) {
+      console.warn(`[WARNING] Route "${newPath}" already exists, merging methods and overriding options`);
+      existingRoute.methods = {...existingRoute.methods, ...methods};
+      existingRoute.options = options;
+      return existingRoute;
+    }
     const route = {
-      path,
+      path: newPath,
       methods,
       options
     }
@@ -319,14 +328,18 @@ export class OpenApiRouter<T> {
   get specification() {
     const newSpec = { ...this.document } as any;
     if (!newSpec.paths) newSpec.paths = {};
-    for (const { path: rawPath, methods } of this.routes) {
+    for (const { path: rawPath, methods, options: routeOptions } of this.routes) {
+      if (routeOptions?.excludeFromSpecification === true) continue;
       const path = replacePathWithOpenApiParams(rawPath);
       newSpec.paths[path] = newSpec.paths[path] || {};
-      for (const [_method, { specification: originalSpec }] of Object.entries(methods)) {
+      for (const [_method, { specification: originalSpec, options: operatorOptions }] of Object.entries(methods)) {
+        const options = getOperationOptions({ operatorOptions: operatorOptions, routeOptions, routerOptions: this.options });
+        if (options?.excludeFromSpecification === true) continue;
         const method = _method as Router.OperatorName;
         const specification = this.options.specModifier ? this.options.specModifier(originalSpec) : originalSpec;
         newSpec.paths[path][method] = specification;
       }
+      if (Object.keys(newSpec.paths[path]).length === 0) delete newSpec.paths[path];
     }
     return newSpec as OpenAPI.Document;
   }
@@ -340,7 +353,7 @@ export class OpenApiRouter<T> {
       }
       toLog.push('');
     }
-    console.log(toLog.join('\n'));
+    return toLog.join('\n');
   }
 
   //////////////////////// PRIVATE METHODS ////////////////////////

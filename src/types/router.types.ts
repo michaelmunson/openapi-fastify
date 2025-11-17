@@ -39,7 +39,13 @@ export type OperatorOptions = {
    * @description
    * - Whether to automatically validate the request body and/or response.
    */
-  autoValidate?: AutoValidateConfig
+  autoValidate?: AutoValidateConfig,
+  /**
+   * @description
+   * - Whether to exclude the operator from the OpenAPI specification.
+   * @default false
+   */
+  excludeFromSpecification?: boolean
 }
 
 export type OperatorRecord = {

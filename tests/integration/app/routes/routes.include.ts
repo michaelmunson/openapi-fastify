@@ -25,7 +25,7 @@ $.route("/hello", {
     },
     async () => {
       return { message: "Hello, world!" };
-    }
+    },
   )
 });
 
@@ -86,6 +86,10 @@ $.route("/users", {
       return result;
     }
   ),
+  
+});
+
+$.route("/users", {
   post: $.op(
     <const>{
       summary: "Create a new user",
@@ -116,10 +120,9 @@ $.route("/users", {
       const { password: _, ...rest } = user;
       reply.code(201);
       return rest;
-    },
-    {autoValidate: false}
+    }
   )
-});
+})
 
 // GET /users/:id - get user by id (without password)
 $.route("/users/:id", {
