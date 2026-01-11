@@ -9,12 +9,16 @@ export const OPERATOR_NAMES = ['get', 'post', 'put', 'delete', 'patch', 'options
 
 
 export function deepMerge<Base extends object, Value extends Base = Base>(base: Base, value: Value): Base & Value {
-  const result = { ...base } as Base;
+  const result = Array.isArray(base) ? [...base] : { ...base } as Base;
   for (const key in value) {
       const baseValue = (base as any)[key];
       const updateValue = (value as any)[key];
       if (baseValue && updateValue && typeof baseValue === 'object' && typeof updateValue === 'object') {
-          (result as any)[key] = deepMerge(baseValue, updateValue);
+        if (Array.isArray(updateValue)) {
+          (result as any)[key] = updateValue;
+        } else {
+        (result as any)[key] = deepMerge(baseValue, updateValue);
+        }
       } else if (updateValue !== undefined) {
           (result as any)[key] = updateValue;
       }
@@ -107,10 +111,10 @@ export const validateRequestBody = <T extends OpenAPI.Operator>(specification: T
 export const validateResponse = <T extends OpenAPI.Operator>(specification: T, response: FastifyReply, payload:any) => {
   const ajv = new Ajv();
   const {responses} = specification as unknown as {responses:OpenAPI.Response | undefined};
-  if (!responses) return {isValid:true};
-  const [, responseSchemaContent] = Object.entries(responses).find(([code, responseSchema]) => code === response.status.toString()) ?? [];
+  if (!responses) return {isValid:true, errors:[]};
+  const [, responseSchemaContent] = Object.entries(responses).find(([code, responseSchema]) => code === response.status?.toString()) ?? [];
   const schema = responseSchemaContent?.content?.['application/json']?.schema as OpenAPI.Schema | undefined;
-  if (!schema) return {isValid:true};
+  if (!schema) return {isValid:true, errors:[]};
   const validate = ajv.compile(schema);
   const isValid = validate(payload);
   return {
@@ -122,17 +126,17 @@ export const validateResponse = <T extends OpenAPI.Operator>(specification: T, r
 export const isDebugMode = () => ['1', 'true'].includes(process.env.DEBUG_OPENAPI_FASTIFY ?? '');
 export const debugGroup = (...args: any[]) => {
   if (isDebugMode()) {
-    console.group(...args);
+    console.group('[openapi-fastify] ',...args);
   }
 }
 export const debugLog = (...args: any[]) => {
   if (isDebugMode()) {
-    console.log(...args);
+    console.log('[openapi-fastify] ',...args);
   }
 }
 export const debugLogEnd = (...args: any[]) => {
   if (isDebugMode()) {
-    if (args.length > 0) console.log(...args);
+    if (args.length > 0) console.log('[openapi-fastify] ',...args);
     console.groupEnd();
   }
 }
@@ -178,8 +182,8 @@ export const getAutoValidateConfig = (autoValidate: AutoValidateConfig = false) 
   if (typeof autoValidate === 'object') {
     return {
       ...autoValidate,
-      request: autoValidate.request === true ? {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.request.errorResponse} : autoValidate.request as Exclude<AutoValidateRequestResponseConfig, boolean>,
-      response: autoValidate.response === true ? {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.response.errorResponse} : autoValidate.response as Exclude<AutoValidateRequestResponseConfig, boolean>,
+      request: autoValidate.request === true ? {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.request.errorResponse} : (autoValidate.request ?? AUTO_VALIDATION_DEFAULTS.request) as Exclude<AutoValidateRequestResponseConfig, boolean>,
+      response: autoValidate.response === true ? {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.response.errorResponse} : (autoValidate.response ?? AUTO_VALIDATION_DEFAULTS.response) as Exclude<AutoValidateRequestResponseConfig, boolean>,
     }
   }
   return AUTO_VALIDATION_DEFAULTS;
@@ -213,19 +217,26 @@ export const getDefaultOperationOptions = ({operatorOptions = {}, routeOptions =
   }
 }
 
-export const getRequestBodySchema = (specification: OpenAPI.Operator) => {
+export const getIsRequestBodyRequired = (specification: OpenAPI.Operator): boolean | undefined => {
+  const requestBody = (specification as { requestBody?: OpenAPI.RequestBody }).requestBody;
+  return !!(requestBody?.required);
+}
+
+
+export const getRequestBodySchema = (contentType: string, specification: OpenAPI.Operator) => {
   const {requestBody} = specification as {requestBody:OpenAPI.RequestBody | undefined};
   if (!requestBody) return undefined;
   const {content} = requestBody;
   if (!content) return undefined;
-  const {schema} = content['application/json'] as {schema:OpenAPI.Schema};
-  return schema;
+  return content[contentType]?.schema;
 }
 
-export const getResponseSchema = (specification: OpenAPI.Operator, response: FastifyReply) => {
+export const getResponseSchema = (contentType: string, specification: OpenAPI.Operator, response: FastifyReply) => {
   const {responses} = specification as unknown as {responses:OpenAPI.Response | undefined};
   if (!responses) return undefined;
   const responseSchemaContent = responses?.[response.statusCode.toString() as keyof OpenAPI.Response] as {content?: Record<string, {schema:OpenAPI.Schema}>};
   const schema = responseSchemaContent?.content?.['application/json']?.schema as OpenAPI.Schema | undefined;
   return schema;
 }
+
+export const isObject = (value: any) : value is Record<string, any> => value !== null && typeof value === 'object' && value.toString() === '[object Object]';

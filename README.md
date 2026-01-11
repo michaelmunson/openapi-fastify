@@ -205,7 +205,7 @@ const operation = router.op(
 );
 ```
 
-##### `ref<S>(ref: S, options?: { useRef?: boolean })`
+##### `ref<S>(ref: S, options?: { useRef?: boolean, override?:Record<string,any> })`
 
 Creates a reference to a schema in the OpenAPI document.
 
@@ -213,8 +213,8 @@ Creates a reference to a schema in the OpenAPI document.
 // Get the actual schema object
 const userSchema = router.ref('#/components/schemas/User');
 
-// Get a $ref object
-const userRef = router.ref('#/components/schemas/User', { useRef: true });
+// Get a $ref object, set required to ['id']
+const userRef = router.ref('#/components/schemas/User', { useRef: true, override:{required: ['id']} });
 ```
 
 ##### `spec<T>(specification: T)`
@@ -425,11 +425,9 @@ npm test
 ```
 
 ### Debug Mode
-
-Enable debug logging by setting the `DEBUG` environment variable:
-
+Enable debug logging by setting the `DEBUG_OPENAPI_FASTIFY` environment variable to `true` or `1`
 ```bash
-DEBUG=true npm start
+DEBUG_OPENAPI_FASTIFY=true npm start
 ```
 
 ## License

@@ -1,7 +1,7 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { OpenAPI, FromSpec, Router } from ".";
-import { AutoLoadConfig, RouterOptions } from "./types/router.types";
-import { AUTO_VALIDATION_DEFAULTS, debugGroup, debugLog, debugLogEnd, getAutoValidateConfig, getCallerDir, getOperationOptions, getOperationPath, getRequestBodySchema, getResponseSchema, replacePathWithOpenApiParams } from "./utils";
+import { AutoLoadConfig, RefOptions, RouterOptions } from "./types/router.types";
+import { AUTO_VALIDATION_DEFAULTS, debugGroup, debugLog, debugLogEnd, deepMerge, getAutoValidateConfig, getCallerDir, getIsRequestBodyRequired, getOperationOptions, getOperationPath, getRequestBodySchema, getResponseSchema, isObject, replacePathWithOpenApiParams } from "./utils";
 import { globSync } from "glob";
 import Ajv from "ajv";
 import ajvFormats from "ajv-formats";
@@ -170,14 +170,35 @@ export class OpenApiRouter<T> {
    * $.ref('#/components/schemas/User', {useRef: true}) // returns `{$ref: '#/components/schemas/User'}`
    * ```
    */
-  ref<S extends FromSpec.Refs<T>>(ref: S, { useRef }: { useRef?: boolean } = { useRef: false }): FromSpec.ComponentFromRef<T, S> {
-    const [, , schema] = (ref as string).replace('#/', '').split('/');
-    const component = (this.document as any).components.schemas[schema];
-    if (useRef) {
-      return {
-        $ref: ref
-      } as any
+  ref<S extends FromSpec.Refs<T>>(ref: S, options?: RefOptions<T, S>): FromSpec.ComponentFromRef<T, S> {
+    const { useRef = false, override=undefined   } = options ?? {};
+    if (useRef) return {
+      $ref: ref
+    } as any;
+    debugGroup('.ref', ref)
+    const rawComponent = (() => {
+      try {
+        let comp = this.document as any;
+        const pathParts = (ref as string).replace('#/', '').split('/');
+        for (const part of pathParts) {
+          if (!isObject(comp)) {
+            debugLog(`Warning: path does not exist in specification`, comp);
+            return {};
+          }
+          comp = comp[part];
+        };
+        return comp;
+      } catch (error) {
+        debugLog(`Error: error getting component from ref (defaulting to empty object)`, error);
+        return {};
+      }
+    })();
+    let component = rawComponent;
+    if (override){
+      debugLog('pre-override resolved reference', rawComponent);
+      component = deepMerge({...rawComponent}, {...override});
     }
+    debugLogEnd('resolved reference', component);
     return {
       ...component
     } as any
@@ -380,6 +401,7 @@ export class OpenApiRouter<T> {
     // request validation hook
     preValidation: async (request: FastifyRequest, reply: FastifyReply) => {
       const payload = request.body;
+      const contentType = request.headers['content-type'] ?? 'application/json';
       const { method, path, operation, options: routeOptions } = this.describeOperation(request);
       try {
         if (method === 'get') return
@@ -388,8 +410,15 @@ export class OpenApiRouter<T> {
         if (!payload) return debugLogEnd(`Skipping Request Body Validation (No Payload)`);
         if (!operation) return debugLogEnd(`Skipping Request Body Validation (No Operation)`);
         if (routeOptions?.autoValidate?.request?.validate !== true) return debugLogEnd(`Skipping Request Body Validation (Auto Validate Disabled)`);
-        const reqBodySpec = getRequestBodySchema(operation.specification);
+        const reqBodySpec = getRequestBodySchema(contentType, operation.specification);
         if (!reqBodySpec) {
+          const isRequired = getIsRequestBodyRequired(operation.specification);
+          if (isRequired) {
+            debugLogEnd(`Request Body Validation Failed | Request Body is required`);
+            const autoValidate = getAutoValidateConfig(this.options.autoValidate);
+            const status = autoValidate?.request?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.request.errorResponse.status;
+            return reply.status(status).send({ error: "Request Body is required" });
+          } 
           return debugLogEnd(`Skipping Request Body Validation (No Request Body Schema)`);
         };
         const validate = this.ajv.compile(reqBodySpec)
@@ -411,10 +440,11 @@ export class OpenApiRouter<T> {
     // response validation hook
     preSerialization: async (request: FastifyRequest, reply: FastifyReply, payload: any) => {
       debugGroup(`Validating Response Body | ${request.method} ${request.routeOptions?.url}`);
+      const contentType = (reply.getHeader('content-type') ?? 'application/json').toString();
       if (!payload) return debugLogEnd(`Skipping Response Body Validation (No Payload)`);
       const { operation, options: routeOptions } = this.describeOperation(request);
       if (!operation) return debugLogEnd(`Skipping Response Body Validation (No Operation)`);
-      const resBodySpec = getResponseSchema(operation?.specification, reply);
+      const resBodySpec = getResponseSchema(contentType, operation?.specification, reply);
       if (!resBodySpec) return debugLogEnd(`Skipping Response Body Validation (No Response Body Schema)`);
       const validate = this.ajv.compile(resBodySpec)
       const isValid = validate(payload);

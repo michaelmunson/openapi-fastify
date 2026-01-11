@@ -2,6 +2,7 @@ import { ErrorObject } from "ajv";
 import { FromSpec, OpenAPI } from ".";
 import { OPERATOR_NAMES } from "../utils";
 import { Options as AjvOptions } from "ajv";
+import { DeepAnyPartial, DeepPartial } from "./utils.types";
 
 export type RouterOptions = RouteOptions & {
   /**
@@ -81,4 +82,9 @@ export type AutoValidateRequestResponseConfig = boolean | {
     status: number,
     payload: Record<string, any> | ((errors: ErrorObject<any>[]) => Record<string, any>)
   },
+}
+
+export type RefOptions<T, S extends FromSpec.Refs<T>> = {
+  useRef?: boolean
+  override?: DeepAnyPartial<FromSpec.ComponentFromRef<T, S>>
 }
