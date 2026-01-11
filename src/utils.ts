@@ -1,142 +1,148 @@
 import { FastifyReply, FastifyRequest } from "fastify";
 import { OpenAPI } from "./types";
-import Ajv from "ajv";
+import Ajv, { Options as AjvOptions, ErrorObject } from "ajv";
+import ajvFormats from "ajv-formats";
 import { dirname } from "path";
 import { fileURLToPath } from "url";
-import { AutoValidateConfig, AutoValidateRequestResponseConfig, OperatorOptions, RouteOptions, RouterOptions} from "./types/router.types";
+import { AutoParseConfig, AutoValidateConfig, AutoValidateRequestResponseConfig, OperatorOptions, RouteOptions, RouterOptions } from "./types/router.types";
 
 export const OPERATOR_NAMES = ['get', 'post', 'put', 'delete', 'patch', 'options', 'head'] as const;
 
+export const createAjv = (config?: AjvOptions) => {
+  const ajv = new Ajv(config);
+  ajvFormats(ajv);
+  return ajv;
+}
 
 export function deepMerge<Base extends object, Value extends Base = Base>(base: Base, value: Value): Base & Value {
   const result = Array.isArray(base) ? [...base] : { ...base } as Base;
   for (const key in value) {
-      const baseValue = (base as any)[key];
-      const updateValue = (value as any)[key];
-      if (baseValue && updateValue && typeof baseValue === 'object' && typeof updateValue === 'object') {
-        if (Array.isArray(updateValue)) {
-          (result as any)[key] = updateValue;
-        } else {
+    const baseValue = (base as any)[key];
+    const updateValue = (value as any)[key];
+    if (baseValue && updateValue && typeof baseValue === 'object' && typeof updateValue === 'object') {
+      if (Array.isArray(updateValue)) {
+        (result as any)[key] = updateValue;
+      } else {
         (result as any)[key] = deepMerge(baseValue, updateValue);
-        }
-      } else if (updateValue !== undefined) {
-          (result as any)[key] = updateValue;
       }
+    } else if (updateValue !== undefined) {
+      (result as any)[key] = updateValue;
+    }
   }
   return result as Base & Value;
 }
 
-export const parseQueryParams = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
-  const {parameters} = specification as {parameters:OpenAPI.Parameter[] | undefined};
-  const {query} = request as {query:Record<string,string>};
-  if (!parameters) return query;
-  const queryParamsTypes = Object.fromEntries(
-    parameters
-      .filter(p => p.in === 'query')
-      .map(p => [p.name, (p.schema as OpenAPI.Schema)?.type ?? 'string'])
-  );
-  const queryParams:Record<string,any> = {};
-  for (const [qpName, qpType] of Object.entries(queryParamsTypes)) {
-    const value = query[qpName];
-    if (value) {
-      if (qpType === 'integer') {
-        queryParams[qpName] = parseInt(value) as unknown as string;
-      } else if (qpType === 'number') {
-        queryParams[qpName] = parseFloat(value) as unknown as string;
-      } else if (qpType === 'boolean') {
-        queryParams[qpName] = value === 'true' ? true : false;
-      } else {
-        queryParams[qpName] = value;
-      }
-    }
+export const getAutoParseConfig = (autoParse: AutoParseConfig = false) => {
+  if (!autoParse) autoParse = false;
+  if (typeof autoParse === 'boolean') return { parameters: { parse: autoParse } };
+  else if (typeof autoParse === 'object' && typeof autoParse !== null) {
+    return {
+      ...autoParse,
+      parameters: { parse: typeof autoParse.parameters === 'boolean' ? autoParse.parameters : autoParse.parameters?.parse ?? false }
+    };
   }
-  return queryParams;
+  return { parameters: { parse: false } };
 }
 
-
-export const parseRequestBody = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
-  const { requestBody } = specification as { requestBody: OpenAPI.RequestBody | undefined };
-  if (!requestBody) return request.body;
-  const { content } = requestBody;
-  if (!content || !content['application/json']) return request.body;
-  const { schema } = content['application/json'] as { schema: OpenAPI.Schema };
-  if (!schema || typeof request.body !== 'object' || request.body === null) return request.body;
-
-  // Helper to recursively apply defaults
-  function applyDefaults(obj: any, schema: any): any {
-    if (!schema || typeof schema !== 'object') return obj;
-    if (schema.type === 'object' && schema.properties) {
-      const result: any = { ...obj };
-      for (const [key, propSchema] of Object.entries(schema.properties) as [string, OpenAPI.Schema][]) {
-        if (result[key] === undefined) {
-          if (propSchema && typeof propSchema === 'object' && 'default' in propSchema) {
-            result[key] = propSchema.default;
-          } else if (propSchema && propSchema.type === 'object') {
-            result[key] = applyDefaults({}, propSchema);
-          }
-        } else if (propSchema && propSchema.type === 'object') {
-          result[key] = applyDefaults(result[key], propSchema);
-        } else if (propSchema && propSchema.type === 'array' && Array.isArray(result[key]) && propSchema.items) {
-          result[key] = result[key].map((item: any) => applyDefaults(item, propSchema.items));
+export const parseOperationParameters = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
+  debugGroup(`${request.method} ${request.url} | Parsing Operation Parameters`);
+  try {
+    const params = (specification as any).parameters as Array<any> | undefined;
+    const result: any = {
+      query: request.query ?? {},
+      params: request.params ?? {},
+      headers: request.headers ?? {},
+    };
+    debugLog('PreParsed Parameters', result);
+    if (!params) return result;
+    for (const param of params) {
+      const reqtype = (
+        param.in === 'query' ? 'query'
+          : param.in === 'path' ? 'params'
+            : param.in === 'header' ? 'headers'
+              : undefined) as keyof FastifyRequest;
+      if (!reqtype) continue;
+      const reqObj = request[reqtype] as Record<string, any>;
+      const value = reqObj[param.name];
+      if (value === undefined || value === null) continue;
+      if (param.schema?.type === "integer" || param.schema?.type === "number") {
+        const parsed = Number(value);
+        result[reqtype][param.name] = Number.isNaN(parsed) ? undefined : parsed;
+      }
+      else if (param.schema?.type === "boolean") {
+        if (typeof value === "string") {
+          result[reqtype][param.name] = value === "true";
+        } else {
+          result[reqtype][param.name] = Boolean(value);
         }
+      } else {
+        result[reqtype][param.name] = value;
       }
-      return result;
     }
-    if (schema.type === 'array' && Array.isArray(obj) && schema.items) {
-      return obj.map((item: any) => applyDefaults(item, schema.items));
-    }
-    return obj;
+    request.params = result.params;
+    request.query = result.query;
+    request.headers = result.headers;
+    debugLogEnd('PostParsed Parameters', {
+      params: request.params,
+      query: request.query,
+      headers: request.headers,
+    });
+    return result;
+  } catch (error) {
+    debugLogEnd('Error Parsing Operation Parameters', error);
+    return {
+      params: request.params,
+      query: request.query,
+      headers: request.headers,
+    };
   }
-
-  return applyDefaults(request.body, schema);
 }
-
 
 export const validateRequestBody = <T extends OpenAPI.Operator>(specification: T, request: FastifyRequest) => {
   const ajv = new Ajv();
-  const {requestBody} = specification as {requestBody:OpenAPI.RequestBody | undefined};
-  if (!requestBody) return {isValid:true};
-  const {content, required} = requestBody;
-  if (!content && !required) return {isValid:true};
-  if (!content) return {isValid:false};
-  const {schema} = content['application/json'] as {schema:OpenAPI.Schema};
+  const { requestBody } = specification as { requestBody: OpenAPI.RequestBody | undefined };
+  if (!requestBody) return { isValid: true };
+  const { content, required } = requestBody;
+  if (!content && !required) return { isValid: true };
+  if (!content) return { isValid: false };
+  const { schema } = content['application/json'] as { schema: OpenAPI.Schema };
   const validate = ajv.compile(schema);
   const isValid = validate(request.body);
   return {
     isValid,
-    errors:validate.errors,
+    errors: validate.errors,
   };
 }
 
-export const validateResponse = <T extends OpenAPI.Operator>(specification: T, response: FastifyReply, payload:any) => {
-  const ajv = new Ajv();
-  const {responses} = specification as unknown as {responses:OpenAPI.Response | undefined};
-  if (!responses) return {isValid:true, errors:[]};
+export const validateResponse = <T extends OpenAPI.Operator>(specification: T, response: FastifyReply, payload: any) => {
+  const ajv = createAjv();
+  const { responses } = specification as unknown as { responses: OpenAPI.Response | undefined };
+  if (!responses) return { isValid: true, errors: [] };
   const [, responseSchemaContent] = Object.entries(responses).find(([code, responseSchema]) => code === response.status?.toString()) ?? [];
   const schema = responseSchemaContent?.content?.['application/json']?.schema as OpenAPI.Schema | undefined;
-  if (!schema) return {isValid:true, errors:[]};
+  if (!schema) return { isValid: true, errors: [] };
   const validate = ajv.compile(schema);
   const isValid = validate(payload);
   return {
     isValid,
-    errors:validate.errors,
+    errors: validate.errors,
   };
 }
 
 export const isDebugMode = () => ['1', 'true'].includes(process.env.DEBUG_OPENAPI_FASTIFY ?? '');
 export const debugGroup = (...args: any[]) => {
   if (isDebugMode()) {
-    console.group('[openapi-fastify] ',...args);
+    console.group('[openapi-fastify] ', ...args);
   }
 }
 export const debugLog = (...args: any[]) => {
   if (isDebugMode()) {
-    console.log('[openapi-fastify] ',...args);
+    console.log('[openapi-fastify] ', ...args);
   }
 }
 export const debugLogEnd = (...args: any[]) => {
   if (isDebugMode()) {
-    if (args.length > 0) console.log('[openapi-fastify] ',...args);
+    if (args.length > 0) console.log('[openapi-fastify] ', ...args);
     console.groupEnd();
   }
 }
@@ -144,19 +150,12 @@ export const debugLogEnd = (...args: any[]) => {
 export const replacePathWithOpenApiParams = (path: string) => path.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, "{$1}");
 
 export const AUTO_VALIDATION_DEFAULTS = {
+  config: undefined,
   request: {
-    validate: false,
-    errorResponse: {
-      status: 400,
-      payload: {error: "Invalid Request Body", errors: []}
-    }
+    validate: false
   },
   response: {
-    validate: false,
-    errorResponse: {
-      status: 500,
-      payload: {error: "Invalid Response", errors: []}
-    }
+    validate: false
   }
 }
 
@@ -171,22 +170,42 @@ export function getCallerDir() {
   return dirname(fileURLToPath(`file://${callerFile}`));
 }
 
-export const getAutoValidateConfig = (autoValidate: AutoValidateConfig = false) : {
+export const getAutoValidateConfig = (autoValidate: AutoValidateConfig = false): {
+  config: AjvOptions | undefined,
   request: Exclude<AutoValidateRequestResponseConfig, boolean>,
   response: Exclude<AutoValidateRequestResponseConfig, boolean>,
 } => {
-  if (autoValidate === true) return {
-    request: {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.request.errorResponse},
-    response: {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.response.errorResponse},
+  if (!autoValidate) autoValidate = false;
+  if (typeof autoValidate === 'boolean') return {
+    config: undefined,
+    request: { validate: autoValidate },
+    response: { validate: autoValidate },
   }
-  if (typeof autoValidate === 'object') {
+  else if (typeof autoValidate === 'object' && typeof autoValidate !== null) {
+    const getReqResConfig = (config?: AutoValidateRequestResponseConfig) => (typeof config === 'boolean' ? { validate: config } : config) || AUTO_VALIDATION_DEFAULTS.request;
     return {
-      ...autoValidate,
-      request: autoValidate.request === true ? {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.request.errorResponse} : (autoValidate.request ?? AUTO_VALIDATION_DEFAULTS.request) as Exclude<AutoValidateRequestResponseConfig, boolean>,
-      response: autoValidate.response === true ? {validate: true, errorResponse: AUTO_VALIDATION_DEFAULTS.response.errorResponse} : (autoValidate.response ?? AUTO_VALIDATION_DEFAULTS.response) as Exclude<AutoValidateRequestResponseConfig, boolean>,
+      config: autoValidate.config,
+      request: getReqResConfig(autoValidate.request),
+      response: getReqResConfig(autoValidate.response),
     }
   }
-  return AUTO_VALIDATION_DEFAULTS;
+  return {
+    config: undefined,
+    request: AUTO_VALIDATION_DEFAULTS.request,
+    response: AUTO_VALIDATION_DEFAULTS.response,
+  }
+}
+
+export const onValidationError = (type: 'request' | 'response', config: AutoValidateConfig | undefined, request: FastifyRequest, reply: FastifyReply, errors: ErrorObject<any>[]) => {
+  const autoValidate = getAutoValidateConfig(config);
+  if (autoValidate[type]?.onError) return autoValidate[type]?.onError(request, reply, errors);
+  else if (autoValidate[type]?.errorResponse) {
+    const { status, payload } = autoValidate[type]?.errorResponse;
+    return reply.status(status).send(typeof payload === 'function' ? payload(errors || []) : payload);
+  }
+  if (type === 'request') return reply.status(400).send({ error: "Invalid Request Body", errors });
+  else if (type === 'response') return reply.status(500).send({ error: "Internal Server Error" });
+  return reply.status(500).send({ error: "Internal Server Error" });
 }
 
 export const getOperationPath = (path: string, options?: RouteOptions) => {
@@ -194,12 +213,12 @@ export const getOperationPath = (path: string, options?: RouteOptions) => {
   return `/${pathArray.join('/')}`;
 }
 
-export const getOperationOptions = ({operatorOptions = {}, routeOptions = {}, routerOptions = {}}:{operatorOptions:OperatorOptions | undefined, routeOptions:RouteOptions | undefined, routerOptions:RouterOptions | undefined}) => {
+export const getOperationOptions = ({ operatorOptions = {}, routeOptions = {}, routerOptions = {} }: { operatorOptions: OperatorOptions | undefined, routeOptions: RouteOptions | undefined, routerOptions: RouterOptions | undefined }) => {
   const merge1 = deepMerge(routerOptions, routeOptions);
   return deepMerge(merge1, operatorOptions);
 }
 
-export const getDefaultOperationOptions = ({operatorOptions = {}, routeOptions = {}, routerOptions = {}}:{operatorOptions:OperatorOptions | undefined, routeOptions:RouteOptions | undefined, routerOptions:RouterOptions | undefined}) : OperatorOptions => {
+export const getDefaultOperationOptions = ({ operatorOptions = {}, routeOptions = {}, routerOptions = {} }: { operatorOptions: OperatorOptions | undefined, routeOptions: RouteOptions | undefined, routerOptions: RouterOptions | undefined }): OperatorOptions => {
   const operatorAutoValidate = getAutoValidateConfig(operatorOptions?.autoValidate);
   const routeAutoValidate = getAutoValidateConfig(routeOptions?.autoValidate);
   const routerAutoValidate = getAutoValidateConfig(routerOptions?.autoValidate);
@@ -207,11 +226,9 @@ export const getDefaultOperationOptions = ({operatorOptions = {}, routeOptions =
     autoValidate: {
       request: {
         validate: operatorAutoValidate?.request?.validate ?? routeAutoValidate?.request?.validate ?? routerAutoValidate?.request?.validate ?? false,
-        errorResponse: operatorAutoValidate?.request?.errorResponse ?? routeAutoValidate?.request?.errorResponse ?? routerAutoValidate?.request?.errorResponse ?? AUTO_VALIDATION_DEFAULTS.request.errorResponse,
       },
       response: {
         validate: operatorAutoValidate?.response?.validate ?? routeAutoValidate?.response?.validate ?? routerAutoValidate?.response?.validate ?? false,
-        errorResponse: operatorAutoValidate?.response?.errorResponse ?? routeAutoValidate?.response?.errorResponse ?? routerAutoValidate?.response?.errorResponse ?? AUTO_VALIDATION_DEFAULTS.response.errorResponse,
       },
     },
   }
@@ -224,19 +241,21 @@ export const getIsRequestBodyRequired = (specification: OpenAPI.Operator): boole
 
 
 export const getRequestBodySchema = (contentType: string, specification: OpenAPI.Operator) => {
-  const {requestBody} = specification as {requestBody:OpenAPI.RequestBody | undefined};
+  const { requestBody } = specification as { requestBody: OpenAPI.RequestBody | undefined };
   if (!requestBody) return undefined;
-  const {content} = requestBody;
+  const { content } = requestBody;
   if (!content) return undefined;
   return content[contentType]?.schema;
 }
 
 export const getResponseSchema = (contentType: string, specification: OpenAPI.Operator, response: FastifyReply) => {
-  const {responses} = specification as unknown as {responses:OpenAPI.Response | undefined};
+  const { responses } = specification as unknown as { responses: OpenAPI.Response | undefined };
   if (!responses) return undefined;
-  const responseSchemaContent = responses?.[response.statusCode.toString() as keyof OpenAPI.Response] as {content?: Record<string, {schema:OpenAPI.Schema}>};
+  const responseSchemaContent = responses?.[response.statusCode.toString() as keyof OpenAPI.Response] as { content?: Record<string, { schema: OpenAPI.Schema }> };
   const schema = responseSchemaContent?.content?.['application/json']?.schema as OpenAPI.Schema | undefined;
   return schema;
 }
 
-export const isObject = (value: any) : value is Record<string, any> => value !== null && typeof value === 'object' && value.toString() === '[object Object]';
+
+
+export const isObject = (value: any): value is Record<string, any> => value !== null && typeof value === 'object' && value.toString() === '[object Object]';

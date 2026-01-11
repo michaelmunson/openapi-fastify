@@ -13,6 +13,9 @@ export const $ = new OpenApiRouter(app, specification, {
       validate: true
     }
   },
+  autoParse: {
+    parameters: true
+  }
 });
 
 export default app;

@@ -6,13 +6,11 @@ A powerful TypeScript library that seamlessly integrates OpenAPI specifications 
 
 ## Features
 
-- **Type-Safe Routing**: Full TypeScript support with compile-time type checking
+- **Full Typescript Support**: Full TypeScript support with compile-time type checking
 - **OpenAPI Integration**: Native OpenAPI 3.0 specification support
-- **Automatic Validation**: Built-in request/response validation using AJV
-- **Schema References**: Easy component schema referencing with `$ref` support
+- **Schema Validation**: Built-in request/response validation using AJV
 - **Route Registration**: Simple, intuitive route definition syntax
 - **Documentation Generation**: Automatic OpenAPI specification generation
-- **Fastify Integration**: Built specifically for Fastify with full compatibility
 
 ## Installation
 
@@ -22,14 +20,11 @@ npm install openapi-fastify
 
 ## Quick Start
 
-### 1. Basic Setup
-
+### Define you OpenAPI Specification
 ```typescript
-import Fastify from 'fastify';
-import { OpenApiRouter } from 'openapi-fastify';
+// specifcation.ts
 
-// Create your OpenAPI specification
-const openApiDoc = <const>{
+export const specification = <const>{ // (!) always use <const> here
   openapi: "3.0.0",
   info: {
     title: "My API",
@@ -50,51 +45,38 @@ const openApiDoc = <const>{
   }
 };
 
-// Initialize Fastify and router
-const app = Fastify();
-const router = new OpenApiRouter(app, openApiDoc, {
+```
+### Instantiate your Fastify and OpenAPIRouter instances
+```typescript
+// app.ts
+import Fastify from 'fastify';
+import { OpenApiRouter } from 'openapi-fastify';
+import { specification } from './specification';
+
+export const app = Fastify();
+
+export const $ = new OpenApiRouter(app, specification, {
   autoValidate: {
     request: {
-      validate: true
+      validate: true // validate request body against schema
     },
     response: {
-      validate: true
+      validate: true // validate response against schema
     }
-  }
+  },
+  autoParse: {
+    parameters: true // parse parameters (path, query, header)
+  },
+  specificationResolver: (spec) => spec // provide a custom spec resolver
 });
 ```
 
-### 2. Define Routes
-
+### Define your Routes
 ```typescript
-// Simple GET route
-router.route("/hello", {
-  get: router.op(
-    <const>{
-      summary: "Say Hello",
-      responses: {
-        200: {
-          description: "A hello world message",
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                properties: {
-                  message: { type: "string" }
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    async () => {
-      return { message: "Hello, world!" };
-    }
-  )
-});
+// routes/users.ts
 
-// POST route with request body validation
+import {router} from '../app'
+
 router.route("/users", {
   post: router.op(
     <const>{
@@ -127,14 +109,19 @@ router.route("/users", {
   )
 });
 ```
-
-### 3. Initialize and Start
-
 ```typescript
-// Register all routes with Fastify
+// routes/index.ts
+
+import './users'
+
+```
+### Initialize and Start
+```typescript
+import {app, router} from './app';
+import './routes'; // (!) always remember to import your routes
+
 router.initialize();
 
-// Start the server
 app.listen({ port: 3000 }, (err, address) => {
   if (err) throw err;
   console.log(`Server listening at ${address}`);

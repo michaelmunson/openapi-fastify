@@ -81,7 +81,12 @@ const specification = <const>{
         content: {
           'application/json': {
             schema: {
-              $ref: '#/components/schemas/Error'
+              type: 'object',
+              properties: {
+                error: { type: 'string' },
+                message: { type: 'string' }
+              },
+              required: ['error']
             }
           }
         }
@@ -91,7 +96,15 @@ const specification = <const>{
         content: {
           'application/json': {
             schema: {
-              $ref: '#/components/schemas/ValidationError'
+              type: 'object',
+              properties: {
+                error: { type: 'string' },
+                errors: {
+                  type: 'array',
+                  items: { type: 'object' }
+                }
+              },
+              required: ['error']
             }
           }
         }

@@ -36,7 +36,7 @@ $.route("/health", {
 // GET /users - List all users
 $.route("/users", {
   get: $.op(
-    <const>{
+    {
       summary: "List all users",
       operationId: "listUsers",
       parameters: [
@@ -66,12 +66,20 @@ $.route("/users", {
               }
             }
           }
+        },
+        400: {
+          description: "Bad request",
+          content: {
+            "application/json": {
+              schema: $.ref('#/components/schemas/Error')
+            }
+          }
         }
       }
     },
     async (request) => {
       const { role, limit } = request.query as { role?: string; limit?: number };
-      
+      if (typeof limit === 'string') return { error: "Invalid limit parameter" };
       // Get all users or filter by role
       let users = db.users;
       if (role) {

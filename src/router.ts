@@ -1,9 +1,9 @@
 import { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { OpenAPI, FromSpec, Router } from ".";
 import { AutoLoadConfig, RefOptions, RouterOptions } from "./types/router.types";
-import { AUTO_VALIDATION_DEFAULTS, debugGroup, debugLog, debugLogEnd, deepMerge, getAutoValidateConfig, getCallerDir, getIsRequestBodyRequired, getOperationOptions, getOperationPath, getRequestBodySchema, getResponseSchema, isObject, replacePathWithOpenApiParams } from "./utils";
+import { AUTO_VALIDATION_DEFAULTS, createAjv, debugGroup, debugLog, debugLogEnd, deepMerge, getAutoParseConfig, getAutoValidateConfig, getCallerDir, getIsRequestBodyRequired, getOperationOptions, getOperationPath, getRequestBodySchema, getResponseSchema, isObject, onValidationError, parseOperationParameters, replacePathWithOpenApiParams } from "./utils";
 import { globSync } from "glob";
-import Ajv from "ajv";
+import Ajv, {ErrorObject} from "ajv";
 import ajvFormats from "ajv-formats";
 
 
@@ -46,18 +46,15 @@ import ajvFormats from "ajv-formats";
  */
 
 export class OpenApiRouter<T> {
-  private readonly ajv: Ajv;
   readonly routes: Array<{
     path: string;
     methods: Router.OperatorRecord;
-    options?: Router.RouteOptions;
+    options?: Router.RouterOptions;
   }> = [];
 
   constructor(readonly app: FastifyInstance, readonly document: T, readonly options: RouterOptions = {}) {
     const autoValidate = options?.autoValidate;
     const ajvOptions = typeof autoValidate === 'object' ? autoValidate?.config : { allErrors: true };
-    this.ajv = new Ajv(ajvOptions);
-    ajvFormats(this.ajv)
   }
 
   /**
@@ -276,7 +273,6 @@ export class OpenApiRouter<T> {
    * ```
    */
   initialize() {
-    let isAutoValidate = this.options.autoValidate
     for (const { path: rawPath, methods, options: routeOptions = {} } of this.routes) {
       for (const [method, { specification: originalSpec, handler, options: operatorOptions = {} }] of Object.entries(methods) as [Router.OperatorName, Router.Operator<OpenAPI.Operator>][]) {
         const operationOptions = getOperationOptions({ operatorOptions, routeOptions, routerOptions: this.options });
@@ -362,6 +358,7 @@ export class OpenApiRouter<T> {
       }
       if (Object.keys(newSpec.paths[path]).length === 0) delete newSpec.paths[path];
     }
+    if (this.options.specificationResolver) return this.options.specificationResolver(newSpec);
     return newSpec as OpenAPI.Document;
   }
 
@@ -394,18 +391,20 @@ export class OpenApiRouter<T> {
     const operation = route?.methods?.[method];
     const options = getOperationOptions({ operatorOptions: operation?.options, routeOptions: route?.options, routerOptions: this.options });
     const autoValidate = getAutoValidateConfig(options?.autoValidate);
-    return { method, path, route, operation, options: { ...options, autoValidate } };
+    const autoParse = getAutoParseConfig(options?.autoParse);
+    return { method, path, route, operation, options: { ...options, autoValidate, autoParse } };
   }
-
   private readonly hooks = {
     // request validation hook
     preValidation: async (request: FastifyRequest, reply: FastifyReply) => {
       const payload = request.body;
       const contentType = request.headers['content-type'] ?? 'application/json';
       const { method, path, operation, options: routeOptions } = this.describeOperation(request);
+      if (routeOptions?.autoParse?.parameters?.parse === true && operation?.specification)
+        parseOperationParameters(operation?.specification, request);
       try {
         if (method === 'get') return
-        debugGroup(`Validating Request Body | ${method} ${path}`);
+        debugGroup(`${method} ${path} | Validating Request Body`);
         if (!path) return debugLogEnd(`Skipping Request Body Validation (No Path)`);
         if (!payload) return debugLogEnd(`Skipping Request Body Validation (No Payload)`);
         if (!operation) return debugLogEnd(`Skipping Request Body Validation (No Operation)`);
@@ -415,22 +414,17 @@ export class OpenApiRouter<T> {
           const isRequired = getIsRequestBodyRequired(operation.specification);
           if (isRequired) {
             debugLogEnd(`Request Body Validation Failed | Request Body is required`);
-            const autoValidate = getAutoValidateConfig(this.options.autoValidate);
-            const status = autoValidate?.request?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.request.errorResponse.status;
-            return reply.status(status).send({ error: "Request Body is required" });
+            return onValidationError('request', routeOptions?.autoValidate, request, reply, [{ message: "Request Body is required", instancePath: '', schemaPath: '#', keyword: 'required', params: {}}])
           } 
           return debugLogEnd(`Skipping Request Body Validation (No Request Body Schema)`);
         };
-        const validate = this.ajv.compile(reqBodySpec)
+        const ajv = createAjv(routeOptions?.autoValidate?.config);
+        const validate = ajv.compile(reqBodySpec)
         const isValid = validate(payload);
         const errors = validate.errors;
-        if (!isValid) {
+        if (!isValid){
           debugLogEnd(`Request Body Validation Failed`, errors);
-          const autoValidate = getAutoValidateConfig(this.options.autoValidate);
-          const status = autoValidate?.request?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.request.errorResponse.status;
-          const payload = autoValidate?.request?.errorResponse?.payload || { ...AUTO_VALIDATION_DEFAULTS.request.errorResponse.payload, errors };
-          const response = typeof payload === 'function' ? payload(errors || []) : payload;
-          return reply.status(status).send(response);
+          return onValidationError('request', routeOptions?.autoValidate, request, reply, errors || [])
         }
         return debugLogEnd(`Request Body Validation Passed`);
       } catch (error) {
@@ -439,6 +433,7 @@ export class OpenApiRouter<T> {
     },
     // response validation hook
     preSerialization: async (request: FastifyRequest, reply: FastifyReply, payload: any) => {
+      if (reply.sent) return;
       debugGroup(`Validating Response Body | ${request.method} ${request.routeOptions?.url}`);
       const contentType = (reply.getHeader('content-type') ?? 'application/json').toString();
       if (!payload) return debugLogEnd(`Skipping Response Body Validation (No Payload)`);
@@ -446,16 +441,13 @@ export class OpenApiRouter<T> {
       if (!operation) return debugLogEnd(`Skipping Response Body Validation (No Operation)`);
       const resBodySpec = getResponseSchema(contentType, operation?.specification, reply);
       if (!resBodySpec) return debugLogEnd(`Skipping Response Body Validation (No Response Body Schema)`);
-      const validate = this.ajv.compile(resBodySpec)
+      const ajv = createAjv(routeOptions?.autoValidate?.config);
+      const validate = ajv.compile(resBodySpec)
       const isValid = validate(payload);
       const errors = validate.errors;
       if (!isValid) {
         debugLogEnd(`Response Body Validation Failed`, errors);
-        const autoValidate = getAutoValidateConfig(this.options.autoValidate);
-        const status = autoValidate?.response?.errorResponse?.status || AUTO_VALIDATION_DEFAULTS.response.errorResponse.status;
-        const payload = autoValidate?.response?.errorResponse?.payload || { ...AUTO_VALIDATION_DEFAULTS.response.errorResponse.payload, errors };
-        const response = typeof payload === 'function' ? payload(errors || []) : payload;
-        return reply.status(status).send(response);
+        return onValidationError('response', routeOptions?.autoValidate, request, reply, errors || [])
       }
       debugLogEnd(`Response Body Validation Passed`);
       return;

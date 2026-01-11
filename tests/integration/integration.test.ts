@@ -38,8 +38,9 @@ describe("Integration Tests", () => {
     describe("GET /users", () => {
       it("should return a list of all users without passwords", async () => {
         const res = await hitServer("/users");
-        expect(res.status).toBe(200);
         const data = await res.json();
+        console.log({status: res.status, data});
+        expect(res.status).toBe(200);
         expect(Array.isArray(data)).toBe(true);
         expect(data.length).toBeGreaterThan(0);
 
@@ -540,16 +541,17 @@ describe("Integration Tests", () => {
       }, 10000);
     });
 
-    describe("Response Validation", () => {
-      it("should validate response schemas match specification", async () => {
-        // All responses should match their defined schemas
-        // This is tested implicitly through the tests above
-        // If response validation is enabled and fails, the tests would fail
-        const res = await hitServer("/health");
-        expect(res.status).toBe(200);
+    describe("Request Validation", () => {
+      it("should return 400 for invalid request body", async () => {
+        const res = await hitServer("/users", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ invalid: "request" })
+        });
         const data = await res.json();
-        expect(data).toHaveProperty("status");
-        expect(data).toHaveProperty("timestamp");
+        console.log({status: res.status, data});
+        expect(res.status).toBe(400);
+        expect(data).toHaveProperty("error");
       }, 10000);
     });
 

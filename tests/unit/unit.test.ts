@@ -8,9 +8,9 @@ import {
   getRequestBodySchema,
   getResponseSchema,
   getAutoValidateConfig,
+  AUTO_VALIDATION_DEFAULTS,
   isObject,
-  parseQueryParams,
-  parseRequestBody,
+  parseOperationParameters,
   validateRequestBody,
   validateResponse,
   deepMerge
@@ -352,8 +352,8 @@ describe("Utilities", () => {
       const request = {
         query: { limit: "10" }
       } as FastifyRequest;
-      const result = parseQueryParams(specification as any, request);
-      expect(result.limit).toBe(10);
+      const result = parseOperationParameters(specification as any, request);
+      expect(result.query.limit).toBe(10);
     });
 
     it("(2) should parse boolean query params", () => {
@@ -365,106 +365,37 @@ describe("Utilities", () => {
       const request = {
         query: { active: "true" }
       } as FastifyRequest;
-      const result = parseQueryParams(specification as any, request);
-      expect(result.active).toBe(true);
+      const result = parseOperationParameters(specification as any, request);
+      expect(result.query.active).toBe(true);
     });
 
-    it("(3) should return query as-is when no parameters", () => {
+    it("(3) should return empty object when no parameters defined", () => {
       const specification = {};
       const request = {
         query: { limit: "10" }
       } as FastifyRequest;
-      const result = parseQueryParams(specification as any, request);
-      expect(result).toEqual({ limit: "10" });
+      const result = parseOperationParameters(specification as any, request);
+      console.log(result);
+      expect(result.query).toEqual({ limit: "10" });
     });
 
-    it("(4) should only parse query parameters, not path parameters", () => {
+    it("(4) should parse all operation parameters", () => {
       const specification = {
         parameters: [
           { name: "limit", in: "query", schema: { type: "integer" } },
-          { name: "id", in: "path", schema: { type: "integer" } }
+          { name: "id", in: "path", schema: { type: "integer" } },
+          { name: "x-is-cool", in: "header", schema: { type: "boolean" } }
         ]
       };
       const request = {
-        query: { limit: "10" }
-      } as FastifyRequest;
-      const result = parseQueryParams(specification as any, request);
-      expect(result.limit).toBe(10);
-      expect(result.id).toBeUndefined();
-    });
-  });
-
-  describe("parseRequestBody", () => {
-    it("(1) should return body as-is when no requestBody", () => {
-      const specification = {};
-      const request = {
-        body: { name: "test" }
-      } as FastifyRequest;
-      const result = parseRequestBody(specification as any, request);
-      expect(result).toEqual({ name: "test" });
-    });
-
-    it("(2) should apply defaults from schema", () => {
-      const specification = {
-        requestBody: {
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                properties: {
-                  name: { type: "string" },
-                  age: { type: "number", default: 0 },
-                  active: { type: "boolean", default: true }
-                }
-              }
-            }
-          }
-        }
-      };
-      const request = {
-        body: { name: "test" }
-      } as FastifyRequest;
-      const result = parseRequestBody(specification as any, request);
-      expect(result).toEqual({ name: "test", age: 0, active: true });
-    });
-
-    it("(3) should not override existing values with defaults", () => {
-      const specification = {
-        requestBody: {
-          content: {
-            "application/json": {
-              schema: {
-                type: "object",
-                properties: {
-                  age: { type: "number", default: 0 }
-                }
-              }
-            }
-          }
-        }
-      };
-      const request = {
-        body: { age: 25 }
-      } as FastifyRequest;
-      const result = parseRequestBody(specification as any, request);
-      expect(result).toEqual({ age: 25 });
-    });
-
-    it("(4) should return body as-is when content type is not application/json", () => {
-      const specification = {
-        requestBody: {
-          content: {
-            "text/plain": {
-              schema: { type: "string" }
-            }
-          }
-        }
-      };
-      const request = {
-        body: "test"
-      } as FastifyRequest;
-      const result = parseRequestBody(specification as any, request);
-      expect(result).toBe("test");
+        query: { limit: "10" },
+        params: { id: "1" },
+        headers: { "x-is-cool": "true" }
+      } as any as FastifyRequest;
+      const result = parseOperationParameters(specification as any, request);
+      expect(result.query.limit).toBe(10);
+      expect(result.params.id).toBe(1);
+      expect(result.headers["x-is-cool"]).toBe(true);
     });
   });
 
@@ -625,6 +556,178 @@ describe("Utilities", () => {
       const value = { a: 1 };
       const result = deepMerge(base, value);
       expect(result).toEqual({ a: 1 });
+    });
+  });
+
+  describe("getAutoValidateConfig", () => {
+    it("(1) should return defaults with validate false when autoValidate is false", () => {
+      const result = getAutoValidateConfig(false);
+      expect(result).toEqual({
+        config: undefined,
+        request: { validate: false },
+        response: { validate: false },
+      });
+    });
+
+    it("(2) should return validate true for both request and response when autoValidate is true", () => {
+      const result = getAutoValidateConfig(true);
+      expect(result).toEqual({
+        config: undefined,
+        request: { validate: true },
+        response: { validate: true },
+      });
+    });
+
+    it("(3) should return defaults when autoValidate is undefined", () => {
+      const result = getAutoValidateConfig(undefined);
+      expect(result).toEqual({
+        config: undefined,
+        request: AUTO_VALIDATION_DEFAULTS.request,
+        response: AUTO_VALIDATION_DEFAULTS.response,
+      });
+    });
+
+    it("(4) should return defaults when autoValidate is null", () => {
+      const result = getAutoValidateConfig(null as any);
+      expect(result).toEqual({
+        config: undefined,
+        request: AUTO_VALIDATION_DEFAULTS.request,
+        response: AUTO_VALIDATION_DEFAULTS.response,
+      });
+    });
+
+    it("(5) should handle object config with only config property", () => {
+      const ajvConfig = { strict: true };
+      const result = getAutoValidateConfig({ config: ajvConfig });
+      expect(result.config).toEqual(ajvConfig);
+      expect(result.request).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+      expect(result.response).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+    });
+
+    it("(6) should handle object config with request as boolean true", () => {
+      const result = getAutoValidateConfig({ request: true });
+      expect(result.request).toEqual({ validate: true });
+      expect(result.response).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+    });
+
+    it("(7) should handle object config with request as boolean false", () => {
+      const result = getAutoValidateConfig({ request: false });
+      expect(result.request).toEqual({ validate: false });
+      expect(result.response).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+    });
+
+    it("(8) should handle object config with response as boolean true", () => {
+      const result = getAutoValidateConfig({ response: true });
+      expect(result.request).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+      expect(result.response).toEqual({ validate: true });
+    });
+
+    it("(9) should handle object config with response as boolean false", () => {
+      const result = getAutoValidateConfig({ response: false });
+      expect(result.request).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+      expect(result.response).toEqual({ validate: false });
+    });
+
+    it("(10) should handle object config with request as object", () => {
+      const requestConfig = {
+        validate: true,
+        errorResponse: {
+          status: 422,
+          payload: { error: "Custom Error" }
+        }
+      };
+      const result = getAutoValidateConfig({ request: requestConfig });
+      expect(result.request).toEqual(requestConfig);
+      expect(result.response).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+    });
+
+    it("(11) should handle object config with response as object", () => {
+      const responseConfig = {
+        validate: true,
+        errorResponse: {
+          status: 502,
+          payload: { error: "Custom Response Error" }
+        }
+      };
+      const result = getAutoValidateConfig({ response: responseConfig });
+      expect(result.request).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+      expect(result.response).toEqual(responseConfig);
+    });
+
+    it("(12) should handle object config with both request and response as objects", () => {
+      const requestConfig = {
+        validate: true,
+        errorResponse: {
+          status: 422,
+          payload: { error: "Request Error" }
+        }
+      };
+      const responseConfig = {
+        validate: false,
+        errorResponse: {
+          status: 502,
+          payload: { error: "Response Error" }
+        }
+      };
+      const result = getAutoValidateConfig({ request: requestConfig, response: responseConfig });
+      expect(result.request).toEqual(requestConfig);
+      expect(result.response).toEqual(responseConfig);
+    });
+
+    it("(13) should handle object config with both request and response as booleans", () => {
+      const result = getAutoValidateConfig({ request: true, response: false });
+      expect(result.request).toEqual({ validate: true });
+      expect(result.response).toEqual({ validate: false });
+    });
+
+    it("(14) should handle object config with config, request, and response", () => {
+      const ajvConfig = { strict: false };
+      const requestConfig = { validate: true };
+      const responseConfig = { validate: false };
+      const result = getAutoValidateConfig({ 
+        config: ajvConfig, 
+        request: requestConfig, 
+        response: responseConfig 
+      });
+      expect(result.config).toEqual(ajvConfig);
+      expect(result.request).toEqual(requestConfig);
+      expect(result.response).toEqual(responseConfig);
+    });
+
+    it("(15) should use defaults when request and response are undefined in object config", () => {
+      const result = getAutoValidateConfig({});
+      expect(result.request).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+      expect(result.response).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+    });
+
+    it("(16) should handle object config with request undefined and response as boolean", () => {
+      const result = getAutoValidateConfig({ response: true });
+      expect(result.request).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+      expect(result.response).toEqual({ validate: true });
+    });
+
+    it("(17) should handle object config with response undefined and request as boolean", () => {
+      const result = getAutoValidateConfig({ request: false });
+      expect(result.request).toEqual({ validate: false });
+      expect(result.response).toEqual(AUTO_VALIDATION_DEFAULTS.request);
+    });
+
+    it("(18) should handle falsy values like 0 as false", () => {
+      const result = getAutoValidateConfig(0 as any);
+      expect(result).toEqual({
+        config: undefined,
+        request: AUTO_VALIDATION_DEFAULTS.request,
+        response: AUTO_VALIDATION_DEFAULTS.response,
+      });
+    });
+
+    it("(19) should handle falsy values like empty string as false", () => {
+      const result = getAutoValidateConfig("" as any);
+      expect(result).toEqual({
+        config: undefined,
+        request: AUTO_VALIDATION_DEFAULTS.request,
+        response: AUTO_VALIDATION_DEFAULTS.response,
+      });
     });
   });
 });
