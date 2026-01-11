@@ -55,7 +55,7 @@ import { specification } from './specification';
 
 export const app = Fastify();
 
-export const $ = new OpenApiRouter(app, specification, {
+export const router = new OpenApiRouter(app, specification, {
   autoValidate: {
     request: {
       validate: true // validate request body against schema
